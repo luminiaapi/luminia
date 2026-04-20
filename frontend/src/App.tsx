@@ -372,14 +372,10 @@ export default function App() {
     if (activeWorkspaceId !== 'local') logoutFromWorkspace(activeWorkspaceId);
   };
 
-  const handleImportRequest = (type: string) => {
-    const names = {
-      openapi: 'Imported from OpenAPI',
-      postman: 'Imported from Postman',
-      insomnia: 'Imported from Insomnia',
-      hoppscotch: 'Imported from Hoppscotch'
-    };
-    createCollection(undefined, names[type as keyof typeof names] || 'Imported Collection');
+  const handleImportCollection = (collection: Collection) => {
+    const current = useCollectionStore.getState().collections;
+    const next = [collection, ...current];
+    useCollectionStore.getState().setCollections(next);
     setImportModalOpen(false);
   };
 
@@ -584,7 +580,7 @@ export default function App() {
       <ImportModal
         isOpen={modals.import.isOpen}
         onClose={() => setImportModalOpen(false)}
-        onImport={handleImportRequest}
+        onImportCollection={handleImportCollection}
       />
     </div>
   );

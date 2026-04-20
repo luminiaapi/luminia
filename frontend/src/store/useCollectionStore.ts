@@ -31,7 +31,13 @@ const recurse = (cols: Collection[], fn: (c: Collection) => Collection): Collect
 export const useCollectionStore = create<CollectionState>()((set, get) => ({
   collections: [],
 
-  setCollections: (collections) => set({ collections }),
+  setCollections: (collections) => {
+    set({ collections });
+    if (isWailsAvailable()) {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveCollections(collections).catch(console.error);
+    }
+  },
 
   createCollection: (parentId, name = 'New Collection') => {
     const newCol: Collection = {
