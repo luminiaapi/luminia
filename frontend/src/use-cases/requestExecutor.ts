@@ -22,6 +22,7 @@ export async function executeRequest(
   environments: Environment[],
   selectedEnvironmentId: string | null,
   allCookies: Cookie[] = [],
+  proxySettings: { enabled: boolean; http: string; https: string; socks: string },
   signal?: AbortSignal
 ): Promise<ExecutionResult> {
   const activeEnv = environments.find(e => e.id === selectedEnvironmentId);
@@ -72,6 +73,7 @@ export async function executeRequest(
     body: resolvedBody,
     bodyFormData: resolvedFormData,
     bodyUrlEncoded: resolvedUrlEncoded,
+    proxy: proxySettings,
   });
 
   if (result.cancelled) {

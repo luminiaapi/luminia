@@ -29,11 +29,10 @@ type RequestItem struct {
 }
 
 type CollectionNode struct {
-	ID        string           `json:"id"`
-	Name      string           `json:"name"`
-	Collapsed bool             `json:"collapsed"`
-	Items     []RequestItem    `json:"items"`
-	Children  []CollectionNode `json:"children,omitempty"`
+	ID       string           `json:"id"`
+	Name     string           `json:"name"`
+	Items    []RequestItem    `json:"items"`
+	Children []CollectionNode `json:"children,omitempty"`
 }
 
 type KeyValuePair struct {

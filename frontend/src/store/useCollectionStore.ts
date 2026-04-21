@@ -9,12 +9,34 @@ const debouncedSave = createDebouncedSave(400);
 
 function scheduleSave(workspaceId: string, collections: Collection[]) {
   if (!isWailsAvailable()) return;
-  debouncedSave.schedule(() => saveCollections(workspaceId, collections));
+  // Strip collapsed field before saving to DB
+  const stripCollapsed = (cols: Collection[]): any[] => {
+    return cols.map(c => {
+      const { collapsed, ...rest } = c;
+      return {
+        ...rest,
+        children: c.children ? stripCollapsed(c.children) : []
+      };
+    });
+  };
+  const collectionsToSave = stripCollapsed(collections);
+  debouncedSave.schedule(() => saveCollections(workspaceId, collectionsToSave));
 }
 
 function immediateSave(workspaceId: string, collections: Collection[]) {
   if (!isWailsAvailable()) return;
-  debouncedSave.immediate(() => saveCollections(workspaceId, collections));
+  // Strip collapsed field before saving to DB
+  const stripCollapsed = (cols: Collection[]): any[] => {
+    return cols.map(c => {
+      const { collapsed, ...rest } = c;
+      return {
+        ...rest,
+        children: c.children ? stripCollapsed(c.children) : []
+      };
+    });
+  };
+  const collectionsToSave = stripCollapsed(collections);
+  debouncedSave.immediate(() => saveCollections(workspaceId, collectionsToSave));
 }
 
 interface CollectionState {
@@ -41,6 +63,18 @@ function removeCollectionRecursively(collections: Collection[], id: string): Col
     .map(c => ({ ...c, children: c.children ? removeCollectionRecursively(c.children, id) : [] }));
 }
 
+function collapseAllChildren(collections: Collection[]): Collection[] {
+  if (!collections || collections.length === 0) return [];
+  console.log('collapseAllChildren called with:', collections.map(c => c.name));
+  const result = collections.map(c => ({
+    ...c,
+    collapsed: true,
+    children: c.children && c.children.length > 0 ? collapseAllChildren(c.children) : []
+  }));
+  console.log('collapseAllChildren result:', result.map(c => `${c.name} (collapsed=${c.collapsed})`));
+  return result;
+}
+
 export const useCollectionStore = create<CollectionState>()((set, get) => ({
   collections: [],
   workspaceId: 'local-default',
@@ -48,8 +82,17 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
   setWorkspaceId: (id) => set({ workspaceId: id }),
 
   setCollections: (collections) => {
-    set({ collections });
-    immediateSave(get().workspaceId, collections);
+    // Set all collections to collapsed (closed) by default when loading from DB
+    // The collapsed field doesn't exist in DB, so we add it here
+    const setCollapsed = (cols: Collection[]): Collection[] => {
+      return cols.map(c => ({
+        ...c,
+        collapsed: true, // Default to closed
+        children: c.children ? setCollapsed(c.children) : []
+      }));
+    };
+    const collectionsWithCollapsedState = setCollapsed(collections);
+    set({ collections: collectionsWithCollapsedState });
   },
 
   createCollection: (parentId, name = 'New Collection') => {
@@ -75,10 +118,29 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
 
   toggleCollection: (id) => {
     set((state) => {
-      const next = recurse(state.collections, c =>
-        c.id === id ? { ...c, collapsed: !c.collapsed } : c
-      );
-      scheduleSave(get().workspaceId, next);
+      console.log('Before toggle:', JSON.stringify(state.collections, null, 2));
+      const next = recurse(state.collections, c => {
+        if (c.id === id) {
+          const newCollapsed = !c.collapsed;
+          console.log(`Toggling collection ${id} (${c.name}): collapsed=${c.collapsed} -> ${newCollapsed}`);
+          // If collapsing, also collapse all children recursively
+          if (newCollapsed && c.children && c.children.length > 0) {
+            console.log(`Collapsing ${c.children.length} children of ${c.name}`);
+            const result = { 
+              ...c, 
+              collapsed: true, 
+              children: collapseAllChildren(c.children) 
+            };
+            console.log('Result after collapsing children:', JSON.stringify(result, null, 2));
+            return result;
+          }
+          return { ...c, collapsed: newCollapsed };
+        }
+        return c;
+      });
+      console.log('After toggle:', JSON.stringify(next, null, 2));
+      // Don't save collapsed state to database - it's UI state only
+      // scheduleSave(get().workspaceId, next);
       return { collections: next };
     });
   },

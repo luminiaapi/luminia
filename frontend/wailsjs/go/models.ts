@@ -61,7 +61,6 @@ export namespace main {
 	export class CollectionNode {
 	    id: string;
 	    name: string;
-	    collapsed: boolean;
 	    items: RequestItem[];
 	    children?: CollectionNode[];
 	
@@ -73,7 +72,6 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.name = source["name"];
-	        this.collapsed = source["collapsed"];
 	        this.items = this.convertValues(source["items"], RequestItem);
 	        this.children = this.convertValues(source["children"], CollectionNode);
 	    }
@@ -148,6 +146,24 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class ProxySettings {
+	    enabled: boolean;
+	    http: string;
+	    https: string;
+	    socks: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProxySettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.http = source["http"];
+	        this.https = source["https"];
+	        this.socks = source["socks"];
+	    }
+	}
 	export class KVPair {
 	    id: string;
 	    key: string;
@@ -176,6 +192,7 @@ export namespace main {
 	    body: string;
 	    bodyFormData: KVPair[];
 	    bodyUrlEncoded: KVPair[];
+	    proxy: ProxySettings;
 	
 	    static createFrom(source: any = {}) {
 	        return new HTTPRequest(source);
@@ -192,6 +209,7 @@ export namespace main {
 	        this.body = source["body"];
 	        this.bodyFormData = this.convertValues(source["bodyFormData"], KVPair);
 	        this.bodyUrlEncoded = this.convertValues(source["bodyUrlEncoded"], KVPair);
+	        this.proxy = this.convertValues(source["proxy"], ProxySettings);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -296,6 +314,7 @@ export namespace main {
 	        this.timestamp = source["timestamp"];
 	    }
 	}
+	
 	
 	
 	

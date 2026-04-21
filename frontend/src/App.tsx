@@ -55,7 +55,7 @@ export default function App() {
 
   const {
     collections, createCollection, toggleCollection,
-    addRequestToCollection, editItem, deleteItem, moveRequestToCollection,
+    addRequestToCollection, editItem, deleteItem: deleteCollectionItem, moveRequestToCollection,
   } = useCollectionStore();
 
   const {
@@ -197,12 +197,20 @@ export default function App() {
   const handleSaveEdit = useCallback((newName: string) => {
     if (!modals.edit.isOpen) return;
     const { type, id, parentId } = modals.edit;
-    editItem(type, id, newName, parentId);
-    if (type === 'request' && parentId) {
-      const req = findCollectionById(useCollectionStore.getState().collections, parentId)
-        ?.items.find(i => i.id === id);
-      if (req) setTabs(tabs.map(t => (t.url === req.url && t.method === req.method) ? { ...t, name: newName } : t));
+    
+    if (type === 'environment') {
+      // Update environment name
+      useEnvironmentStore.getState().updateEnvironment(id, { name: newName });
+    } else {
+      // Update collection or request
+      editItem(type, id, newName, parentId);
+      if (type === 'request' && parentId) {
+        const req = findCollectionById(useCollectionStore.getState().collections, parentId)
+          ?.items.find(i => i.id === id);
+        if (req) setTabs(tabs.map(t => (t.url === req.url && t.method === req.method) ? { ...t, name: newName } : t));
+      }
     }
+    
     closeEditModal();
   }, [modals.edit, editItem, setTabs, tabs, closeEditModal]);
 
@@ -277,7 +285,8 @@ export default function App() {
     const controller = new AbortController();
     updateActiveTab({ isSending: true, abortController: controller });
     try {
-      const result = await executeRequest(activeTab, environments, activeEnvironmentId, cookies, controller.signal);
+      const proxySettings = useSettingsStore.getState().proxy;
+      const result = await executeRequest(activeTab, environments, activeEnvironmentId, cookies, proxySettings, controller.signal);
       if (result.response.cancelled) {
         updateActiveTab({ isSending: false, abortController: null });
         return;
@@ -350,6 +359,14 @@ export default function App() {
       openEditModal('environment', newEnv.id, newEnv.name);
     }, 0);
   }, [createEnvironment, openEditModal]);
+
+  const handleDeleteItem = useCallback((type: 'collection' | 'request' | 'environment', id: string, parentId?: string) => {
+    if (type === 'environment') {
+      useEnvironmentStore.getState().deleteEnvironment(id);
+    } else {
+      deleteCollectionItem(type, id, parentId);
+    }
+  }, [deleteCollectionItem]);
 
   // ── Cursor class ─────────────────────────────────────────────────────────────
   const cursorClass = [
@@ -431,7 +448,7 @@ export default function App() {
           onToggleCollection={toggleCollection}
           onAddRequest={handleAddRequestToCollection}
           onEdit={openEditModal}
-          onDelete={deleteItem}
+          onDelete={handleDeleteItem}
           onMoveRequest={moveRequestToCollection}
           onAddServer={() => setWorkspaceModalOpen(true)}
           onImport={() => setImportModalOpen(true)}

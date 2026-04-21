@@ -32,16 +32,24 @@ type AuthConfig struct {
 	APIKeyValue string `json:"apiKeyValue,omitempty"`
 }
 
+type ProxySettings struct {
+	Enabled bool   `json:"enabled"`
+	HTTP    string `json:"http"`
+	HTTPS   string `json:"https"`
+	SOCKS   string `json:"socks"`
+}
+
 type HTTPRequest struct {
-	Method         string     `json:"method"`
-	URL            string     `json:"url"`
-	Headers        []KVPair   `json:"headers"`
-	Params         []KVPair   `json:"params"`
-	Auth           AuthConfig `json:"auth"`
-	BodyType       string     `json:"bodyType"`
-	Body           string     `json:"body"`
-	BodyFormData   []KVPair   `json:"bodyFormData"`
-	BodyURLEncoded []KVPair   `json:"bodyUrlEncoded"`
+	Method         string        `json:"method"`
+	URL            string        `json:"url"`
+	Headers        []KVPair      `json:"headers"`
+	Params         []KVPair      `json:"params"`
+	Auth           AuthConfig    `json:"auth"`
+	BodyType       string        `json:"bodyType"`
+	Body           string        `json:"body"`
+	BodyFormData   []KVPair      `json:"bodyFormData"`
+	BodyURLEncoded []KVPair      `json:"bodyUrlEncoded"`
+	Proxy          ProxySettings `json:"proxy"`
 }
 
 type ResponseHeader struct {
@@ -172,10 +180,35 @@ func (a *App) SendRequest(req HTTPRequest) HTTPResponse {
 		}
 	}
 
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
+	}
+
+	// Configure proxy if enabled
+	if req.Proxy.Enabled {
+		proxyFunc := func(r *http.Request) (*url.URL, error) {
+			scheme := r.URL.Scheme
+			var proxyURL string
+
+			// Choose proxy based on request scheme
+			if scheme == "https" && req.Proxy.HTTPS != "" {
+				proxyURL = req.Proxy.HTTPS
+			} else if scheme == "http" && req.Proxy.HTTP != "" {
+				proxyURL = req.Proxy.HTTP
+			} else if req.Proxy.SOCKS != "" {
+				proxyURL = req.Proxy.SOCKS
+			}
+
+			if proxyURL != "" {
+				return url.Parse(proxyURL)
+			}
+			return nil, nil
+		}
+		transport.Proxy = proxyFunc
+	}
+
 	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
-		},
+		Transport: transport,
 	}
 
 	resp, err := client.Do(httpReq)

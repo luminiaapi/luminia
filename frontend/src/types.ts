@@ -74,7 +74,7 @@ export interface Collection {
   id: string;
   name: string;
   items: RequestItem[];
-  collapsed: boolean;
+  collapsed?: boolean; // UI state only, not persisted
   children?: Collection[];
 }
 
