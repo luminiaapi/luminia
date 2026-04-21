@@ -151,10 +151,12 @@ export default function App() {
 
   // ── Keyboard shortcuts ───────────────────────────────────────────────────────
   const handleSaveRequestRef = useRef<(tabId?: string) => void>(() => {});
+  const handleSendRequestRef = useRef<() => void>(() => {});
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSaveRequestRef.current(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'w') { e.preventDefault(); closeTab(activeTabId); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleSendRequestRef.current(); }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -344,6 +346,8 @@ export default function App() {
       updateActiveTab({ isSending: false, abortController: null });
     }
   }, [activeTab, environments, activeEnvironmentId, cookies, updateActiveTab]);
+
+  handleSendRequestRef.current = handleSend;
 
   const handleCancelRequest = useCallback(() => {
     activeTab.abortController?.abort();

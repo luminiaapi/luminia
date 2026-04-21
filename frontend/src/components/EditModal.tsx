@@ -27,6 +27,24 @@ export function EditModal({ isOpen, onClose, target, onSave, environments, selec
     }
   }, [isOpen, target]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleSave();
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, name]);
+
   const handleSave = () => {
     onSave(name);
   };
