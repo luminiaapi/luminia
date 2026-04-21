@@ -45,6 +45,8 @@ const createDefaultTab = (id: string, name = 'Untitled Request', method: HttpMet
   body: '',
   bodyFormData: [createEmptyKeyValuePair()],
   bodyUrlEncoded: [createEmptyKeyValuePair()],
+  preRequestScript: '',
+  postResponseScript: '',
   response: null,
   isSending: false
 });
@@ -191,14 +193,16 @@ export const useTabStore = create<TabState>()(
         const base = createDefaultTab(item.id, item.name, item.method, item.url, collectionId);
         const newTab: RequestTab = {
           ...base,
-          params:         item.params         ?? base.params,
-          pathVariables:  item.pathVariables   ?? base.pathVariables,
-          headers:        item.headers         ?? base.headers,
-          auth:           item.auth            ?? base.auth,
-          bodyType:       item.bodyType        ?? base.bodyType,
-          body:           item.body            ?? base.body,
-          bodyFormData:   item.bodyFormData    ?? base.bodyFormData,
-          bodyUrlEncoded: item.bodyUrlEncoded  ?? base.bodyUrlEncoded,
+          params:             item.params             ?? base.params,
+          pathVariables:      item.pathVariables      ?? base.pathVariables,
+          headers:            item.headers            ?? base.headers,
+          auth:               item.auth               ?? base.auth,
+          bodyType:           item.bodyType           ?? base.bodyType,
+          body:               item.body               ?? base.body,
+          bodyFormData:       item.bodyFormData       ?? base.bodyFormData,
+          bodyUrlEncoded:     item.bodyUrlEncoded     ?? base.bodyUrlEncoded,
+          preRequestScript:   item.preRequestScript   ?? base.preRequestScript,
+          postResponseScript: item.postResponseScript ?? base.postResponseScript,
         };
         set((state) => ({ tabs: [...state.tabs, newTab], activeTabId: item.id }));
       }

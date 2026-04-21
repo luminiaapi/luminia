@@ -303,18 +303,7 @@ export function VariableInput({
   const Tag = multiline ? 'textarea' : 'input';
 
   return (
-    <div className={`relative flex flex-col ${isFocused ? 'z-[1000]' : 'z-auto'} ${className}`}>
-      {/* Background highlighting layer */}
-      <div 
-        ref={mirrorRef}
-        aria-hidden="true"
-        className={`absolute inset-0 pointer-events-none whitespace-pre-wrap break-all px-4 py-2.5 font-mono text-sm border border-transparent overflow-hidden ${multiline ? 'h-full' : ''}`}
-        style={{ color: 'transparent' }}
-      >
-        {renderHighlightedText()}
-        {!value && placeholder && <span className="text-text-dim/30">{placeholder}</span>}
-      </div>
-
+    <div className={`relative flex flex-col ${className}`}>
       {/* Real interaction layer */}
       <Tag
         ref={inputRef as any}
@@ -334,9 +323,21 @@ export function VariableInput({
         onKeyDown={handleKeyDown}
         onScroll={handleScroll}
         readOnly={readOnly}
-        className={`w-full bg-transparent border border-white/10 rounded-lg px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-brand-accent/50 transition-[border-color,background-color] placeholder:text-transparent caret-white relative z-10 ${multiline ? 'resize-y min-h-[200px]' : ''} ${readOnly ? 'cursor-default' : ''}`}
+        className={`w-full bg-transparent border border-white/10 rounded-lg px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-brand-accent/50 transition-[border-color,background-color] placeholder:text-text-dim/50 caret-white relative z-10 ${multiline ? 'resize-y min-h-[200px]' : ''} ${readOnly ? 'cursor-default' : ''}`}
         placeholder={placeholder}
+        style={{ color: '#ffffff' }}
       />
+
+      {/* Background highlighting layer */}
+      <div 
+        ref={mirrorRef}
+        aria-hidden="true"
+        className={`absolute inset-0 pointer-events-none whitespace-pre-wrap break-all px-4 py-2.5 font-mono text-sm border border-transparent overflow-hidden ${multiline ? 'h-full' : ''}`}
+        style={{ color: 'transparent', zIndex: 1 }}
+      >
+        {renderHighlightedText()}
+        {!value && placeholder && <span className="text-text-dim/30">{placeholder}</span>}
+      </div>
 
       {/* Variable Value Tooltip */}
       <AnimatePresence>

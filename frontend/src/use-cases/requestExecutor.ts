@@ -1,6 +1,7 @@
 import { RequestTab, Environment, Cookie } from '../types';
 import { resolveVariables, resolveKeyValuePairs } from '../lib/variableResolver';
 import { waitForWails, isWailsAvailable, sendRequest, addHistory } from '../lib/wails';
+import { ScriptEngine } from '../lib/scriptEngine';
 
 export interface ResponseData {
   status: number;
@@ -24,10 +25,36 @@ export async function executeRequest(
   selectedEnvironmentId: string | null,
   allCookies: Cookie[] = [],
   proxySettings: { enabled: boolean; http: string; https: string; socks: string },
+  onEnvironmentUpdate: (id: string, updates: Partial<Environment>) => void,
   signal?: AbortSignal
 ): Promise<ExecutionResult> {
   const activeEnv = environments.find(e => e.id === selectedEnvironmentId);
   const envVars = activeEnv?.variables || [];
+
+  // Create script engine
+  const scriptEngine = new ScriptEngine(environments, selectedEnvironmentId, onEnvironmentUpdate);
+
+  // Execute pre-request script
+  let resolvedHeaders = resolveKeyValuePairs(tab.headers, envVars);
+  if (tab.preRequestScript) {
+    const preScriptResult = await scriptEngine.executePreRequestScript(tab.preRequestScript, resolvedHeaders);
+    if (!preScriptResult.success) {
+      return {
+        response: {
+          status: 0,
+          statusText: 'Pre-request script failed',
+          time: '0ms',
+          size: '0B',
+          headers: [],
+          body: '',
+          error: `Pre-request script error: ${preScriptResult.error}`
+        }
+      };
+    }
+    if (preScriptResult.updatedHeaders) {
+      resolvedHeaders = preScriptResult.updatedHeaders;
+    }
+  }
 
   // Resolve environment variables
   let resolvedUrl = resolveVariables(tab.url, envVars);
@@ -40,7 +67,6 @@ export async function executeRequest(
   }
 
   const resolvedParams      = resolveKeyValuePairs(tab.params, envVars);
-  const resolvedHeaders     = resolveKeyValuePairs(tab.headers, envVars);
   const resolvedBody        = resolveVariables(tab.body, envVars);
   const resolvedFormData    = resolveKeyValuePairs(tab.bodyFormData, envVars);
   const resolvedUrlEncoded  = resolveKeyValuePairs(tab.bodyUrlEncoded, envVars);
@@ -97,6 +123,18 @@ export async function executeRequest(
   try { parsedBody = JSON.parse(result.body); } catch { /* keep as string */ }
 
   const response: ResponseData = { ...result, body: parsedBody };
+
+  // Execute post-response script
+  if (tab.postResponseScript) {
+    const postScriptResult = await scriptEngine.executePostResponseScript(tab.postResponseScript, response);
+    if (!postScriptResult.success) {
+      console.error('Post-response script failed:', postScriptResult.error);
+    }
+    if (postScriptResult.testResults) {
+      console.log('Test results:', postScriptResult.testResults);
+      // You could add test results to the response here if needed
+    }
+  }
 
   // Persist to history (fire-and-forget)
   addHistory({

@@ -16,6 +16,7 @@ import { BodyEditor } from './BodyEditor';
 import { VariableInput } from './VariableInput';
 import { useResponsePanel } from '../hooks/useResponsePanel';
 import { useCookieStore } from '../store/useCookieStore';
+import { ScriptEditor } from './ScriptEditor';
 
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -432,7 +433,16 @@ export function Workspace({
                   <CodeGeneratorPanel tab={activeTab} />
                 )}
 
-                {(activeWorkTab === 'scripts' || activeWorkTab === 'settings') && (
+                {activeWorkTab === 'scripts' && (
+                  <ScriptEditor
+                    preRequestScript={activeTab.preRequestScript || ''}
+                    postResponseScript={activeTab.postResponseScript || ''}
+                    onUpdatePreRequestScript={(script) => onUpdateActiveTab({ preRequestScript: script })}
+                    onUpdatePostResponseScript={(script) => onUpdateActiveTab({ postResponseScript: script })}
+                  />
+                )}
+
+                {activeWorkTab === 'settings' && (
                   <div className="p-12 text-center border-2 border-dashed border-white/5 rounded-2xl">
                     <Terminal className="w-8 h-8 text-text-dim mx-auto mb-4 opacity-20" />
                     <p className="text-sm text-text-dim">Sub-module under active implementation</p>

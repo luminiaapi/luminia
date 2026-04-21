@@ -288,7 +288,7 @@ export default function App() {
     updateActiveTab({ isSending: true, abortController: controller });
     try {
       const proxySettings = useSettingsStore.getState().proxy;
-      const result = await executeRequest(activeTab, environments, activeEnvironmentId, cookies, proxySettings, controller.signal);
+      const result = await executeRequest(activeTab, environments, activeEnvironmentId, cookies, proxySettings, updateEnvironment, controller.signal);
       if (result.response.cancelled) {
         updateActiveTab({ isSending: false, abortController: null });
         return;

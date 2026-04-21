@@ -41,6 +41,8 @@ export interface RequestItem {
   body?: string;
   bodyFormData?: KeyValuePair[];
   bodyUrlEncoded?: KeyValuePair[];
+  preRequestScript?: string;
+  postResponseScript?: string;
 }
 
 export interface RequestTab {
@@ -65,6 +67,8 @@ export interface RequestTab {
   body: string;
   bodyFormData: KeyValuePair[];
   bodyUrlEncoded: KeyValuePair[];
+  preRequestScript?: string;
+  postResponseScript?: string;
   response: any | null;
   isSending: boolean;
   abortController?: AbortController | null;
