@@ -146,6 +146,32 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class RequestCookie {
+	    name: string;
+	    value: string;
+	    domain: string;
+	    path: string;
+	    expires?: string;
+	    httpOnly: boolean;
+	    secure: boolean;
+	    enabled: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new RequestCookie(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.value = source["value"];
+	        this.domain = source["domain"];
+	        this.path = source["path"];
+	        this.expires = source["expires"];
+	        this.httpOnly = source["httpOnly"];
+	        this.secure = source["secure"];
+	        this.enabled = source["enabled"];
+	    }
+	}
 	export class ProxySettings {
 	    enabled: boolean;
 	    http: string;
@@ -193,6 +219,7 @@ export namespace main {
 	    bodyFormData: KVPair[];
 	    bodyUrlEncoded: KVPair[];
 	    proxy: ProxySettings;
+	    cookies: RequestCookie[];
 	
 	    static createFrom(source: any = {}) {
 	        return new HTTPRequest(source);
@@ -210,6 +237,7 @@ export namespace main {
 	        this.bodyFormData = this.convertValues(source["bodyFormData"], KVPair);
 	        this.bodyUrlEncoded = this.convertValues(source["bodyUrlEncoded"], KVPair);
 	        this.proxy = this.convertValues(source["proxy"], ProxySettings);
+	        this.cookies = this.convertValues(source["cookies"], RequestCookie);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -229,6 +257,32 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class ResponseCookie {
+	    id: string;
+	    name: string;
+	    value: string;
+	    domain: string;
+	    path: string;
+	    expires?: string;
+	    httpOnly: boolean;
+	    secure: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResponseCookie(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.value = source["value"];
+	        this.domain = source["domain"];
+	        this.path = source["path"];
+	        this.expires = source["expires"];
+	        this.httpOnly = source["httpOnly"];
+	        this.secure = source["secure"];
+	    }
 	}
 	export class ResponseHeader {
 	    id: string;
@@ -253,6 +307,7 @@ export namespace main {
 	    size: string;
 	    headers: ResponseHeader[];
 	    body: string;
+	    cookies?: ResponseCookie[];
 	    error?: string;
 	    cancelled?: boolean;
 	
@@ -268,6 +323,7 @@ export namespace main {
 	        this.size = source["size"];
 	        this.headers = this.convertValues(source["headers"], ResponseHeader);
 	        this.body = source["body"];
+	        this.cookies = this.convertValues(source["cookies"], ResponseCookie);
 	        this.error = source["error"];
 	        this.cancelled = source["cancelled"];
 	    }
@@ -314,6 +370,8 @@ export namespace main {
 	        this.timestamp = source["timestamp"];
 	    }
 	}
+	
+	
 	
 	
 	

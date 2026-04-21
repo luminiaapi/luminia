@@ -79,7 +79,7 @@ export default function App() {
     handleLogin: onLogin, handleLogout: onLogout,
   } = useUIStore();
 
-  const { cookies, isCookieModalOpen, addCookie, updateCookie, removeCookie } = useCookieStore();
+  const { cookies, addCookie, updateCookie, removeCookie } = useCookieStore();
   const { theme, accentColor } = useSettingsStore();
   const responsePanel = useResponsePanel();
 
@@ -291,6 +291,43 @@ export default function App() {
         updateActiveTab({ isSending: false, abortController: null });
         return;
       }
+      
+      // Store cookies from response
+      if (result.response.cookies && result.response.cookies.length > 0) {
+        const cookieStore = useCookieStore.getState();
+        result.response.cookies.forEach((responseCookie: any) => {
+          // Check if cookie already exists
+          const existingCookie = cookieStore.cookies.find(
+            c => c.name === responseCookie.name && c.domain === responseCookie.domain
+          );
+          
+          if (existingCookie) {
+            // Update existing cookie
+            cookieStore.updateCookie(existingCookie.id, {
+              value: responseCookie.value,
+              path: responseCookie.path,
+              expires: responseCookie.expires,
+              httpOnly: responseCookie.httpOnly,
+              secure: responseCookie.secure,
+            });
+          } else {
+            // Add new cookie
+            const newCookie = {
+              id: generateId(),
+              name: responseCookie.name,
+              value: responseCookie.value,
+              domain: responseCookie.domain,
+              path: responseCookie.path,
+              expires: responseCookie.expires || '',
+              httpOnly: responseCookie.httpOnly,
+              secure: responseCookie.secure,
+              enabled: true,
+            };
+            cookieStore.setCookies([...cookieStore.cookies, newCookie]);
+          }
+        });
+      }
+      
       if (result.response.status) {
         useHistoryStore.getState().addEntry({
           id: generateId(),
@@ -502,7 +539,7 @@ export default function App() {
 
       <LoginModal isOpen={modals.login.isOpen} onClose={closeLoginModal} onLogin={handleAppLogin} />
 
-      <CookieModal isOpen={isCookieModalOpen} onClose={() => setCookiesModalOpen(false)}
+      <CookieModal isOpen={modals.cookies.isOpen} onClose={() => setCookiesModalOpen(false)}
         cookies={cookies} onAdd={addCookie} onUpdate={updateCookie} onRemove={removeCookie} />
 
       <SavePromptModal

@@ -15,6 +15,7 @@ import { AuthEditor } from './AuthEditor';
 import { BodyEditor } from './BodyEditor';
 import { VariableInput } from './VariableInput';
 import { useResponsePanel } from '../hooks/useResponsePanel';
+import { useCookieStore } from '../store/useCookieStore';
 
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -67,6 +68,7 @@ export function Workspace({
   const [activeResponseTab, setActiveResponseTab] = useState<'body' | 'cookies' | 'headers' | 'timeline'>('body');
   const [showHiddenHeaders, setShowHiddenHeaders] = useState(false);
   const envSelectorRef = useRef<HTMLDivElement>(null);
+  const { cookies } = useCookieStore();
 
   const hiddenHeaders = useMemo(() => {
     const extra: KeyValuePair[] = [];
@@ -142,8 +144,33 @@ export function Workspace({
     extra.push({ id: 'accept', key: 'Accept', value: '*/*', enabled: !isOverridden('Accept') });
     extra.push({ id: 'user-agent', key: 'User-Agent', value: 'LuminaAPI/1.0', enabled: !isOverridden('User-Agent') });
 
+    // Cookie header
+    if (!isOverridden('Cookie')) {
+      try {
+        const requestUrl = new URL(activeTab.url.startsWith('http') ? activeTab.url : `https://${activeTab.url}`);
+        const matchingCookies = cookies.filter(cookie => {
+          if (!cookie.enabled) return false;
+          const cookieDomain = cookie.domain.startsWith('.') ? cookie.domain.substring(1) : cookie.domain;
+          const requestDomain = requestUrl.hostname;
+          return requestDomain === cookieDomain || requestDomain.endsWith('.' + cookieDomain);
+        });
+        
+        if (matchingCookies.length > 0) {
+          const cookieValue = matchingCookies.map(c => `${c.name}=${c.value}`).join('; ');
+          extra.push({ 
+            id: 'cookie', 
+            key: 'Cookie', 
+            value: cookieValue, 
+            enabled: true 
+          });
+        }
+      } catch (e) {
+        // Invalid URL
+      }
+    }
+
     return extra;
-  }, [activeTab.auth, activeTab.bodyType, activeTab.url, activeTab.headers]);
+  }, [activeTab.auth, activeTab.bodyType, activeTab.url, activeTab.headers, cookies]);
   const selectedEnv = environments.find(e => e.id === selectedEnvironmentId);
 
   useEffect(() => {

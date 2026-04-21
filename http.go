@@ -32,6 +32,17 @@ type AuthConfig struct {
 	APIKeyValue string `json:"apiKeyValue,omitempty"`
 }
 
+type RequestCookie struct {
+	Name     string `json:"name"`
+	Value    string `json:"value"`
+	Domain   string `json:"domain"`
+	Path     string `json:"path"`
+	Expires  string `json:"expires,omitempty"`
+	HTTPOnly bool   `json:"httpOnly"`
+	Secure   bool   `json:"secure"`
+	Enabled  bool   `json:"enabled"`
+}
+
 type ProxySettings struct {
 	Enabled bool   `json:"enabled"`
 	HTTP    string `json:"http"`
@@ -40,22 +51,34 @@ type ProxySettings struct {
 }
 
 type HTTPRequest struct {
-	Method         string        `json:"method"`
-	URL            string        `json:"url"`
-	Headers        []KVPair      `json:"headers"`
-	Params         []KVPair      `json:"params"`
-	Auth           AuthConfig    `json:"auth"`
-	BodyType       string        `json:"bodyType"`
-	Body           string        `json:"body"`
-	BodyFormData   []KVPair      `json:"bodyFormData"`
-	BodyURLEncoded []KVPair      `json:"bodyUrlEncoded"`
-	Proxy          ProxySettings `json:"proxy"`
+	Method         string          `json:"method"`
+	URL            string          `json:"url"`
+	Headers        []KVPair        `json:"headers"`
+	Params         []KVPair        `json:"params"`
+	Auth           AuthConfig      `json:"auth"`
+	BodyType       string          `json:"bodyType"`
+	Body           string          `json:"body"`
+	BodyFormData   []KVPair        `json:"bodyFormData"`
+	BodyURLEncoded []KVPair        `json:"bodyUrlEncoded"`
+	Proxy          ProxySettings   `json:"proxy"`
+	Cookies        []RequestCookie `json:"cookies"`
 }
 
 type ResponseHeader struct {
 	ID    string `json:"id"`
 	Key   string `json:"key"`
 	Value string `json:"value"`
+}
+
+type ResponseCookie struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Value    string `json:"value"`
+	Domain   string `json:"domain"`
+	Path     string `json:"path"`
+	Expires  string `json:"expires,omitempty"`
+	HTTPOnly bool   `json:"httpOnly"`
+	Secure   bool   `json:"secure"`
 }
 
 type HTTPResponse struct {
@@ -65,6 +88,7 @@ type HTTPResponse struct {
 	Size       string           `json:"size"`
 	Headers    []ResponseHeader `json:"headers"`
 	Body       string           `json:"body"`
+	Cookies    []ResponseCookie `json:"cookies,omitempty"`
 	Error      string           `json:"error,omitempty"`
 	Cancelled  bool             `json:"cancelled,omitempty"`
 }
@@ -164,6 +188,19 @@ func (a *App) SendRequest(req HTTPRequest) HTTPResponse {
 		}
 	}
 
+	// Add cookies as Cookie header
+	if len(req.Cookies) > 0 {
+		var cookieStrings []string
+		for _, c := range req.Cookies {
+			if c.Enabled {
+				cookieStrings = append(cookieStrings, fmt.Sprintf("%s=%s", c.Name, c.Value))
+			}
+		}
+		if len(cookieStrings) > 0 {
+			httpReq.Header.Set("Cookie", strings.Join(cookieStrings, "; "))
+		}
+	}
+
 	switch req.Auth.Type {
 	case "bearer":
 		if req.Auth.BearerToken != "" {
@@ -209,6 +246,7 @@ func (a *App) SendRequest(req HTTPRequest) HTTPResponse {
 
 	client := &http.Client{
 		Transport: transport,
+		Jar:       nil, // We'll manage cookies manually
 	}
 
 	resp, err := client.Do(httpReq)
@@ -241,6 +279,25 @@ func (a *App) SendRequest(req HTTPRequest) HTTPResponse {
 		i++
 	}
 
+	// Extract cookies from response
+	var respCookies []ResponseCookie
+	for idx, cookie := range resp.Cookies() {
+		expires := ""
+		if !cookie.Expires.IsZero() {
+			expires = cookie.Expires.Format(time.RFC3339)
+		}
+		respCookies = append(respCookies, ResponseCookie{
+			ID:       fmt.Sprintf("%d", idx+1),
+			Name:     cookie.Name,
+			Value:    cookie.Value,
+			Domain:   cookie.Domain,
+			Path:     cookie.Path,
+			Expires:  expires,
+			HTTPOnly: cookie.HttpOnly,
+			Secure:   cookie.Secure,
+		})
+	}
+
 	return HTTPResponse{
 		Status:     resp.StatusCode,
 		StatusText: http.StatusText(resp.StatusCode),
@@ -248,6 +305,7 @@ func (a *App) SendRequest(req HTTPRequest) HTTPResponse {
 		Size:       formatSize(len(bodyBytes)),
 		Headers:    respHeaders,
 		Body:       string(bodyBytes),
+		Cookies:    respCookies,
 	}
 }
 

@@ -9,6 +9,7 @@ export interface ResponseData {
   size: string;
   headers: { id: string; key: string; value: string }[];
   body: any;
+  cookies?: { id: string; name: string; value: string; domain: string; path: string; expires: string; httpOnly: boolean; secure: boolean }[];
   error?: string;
   cancelled?: boolean;
 }
@@ -63,6 +64,16 @@ export async function executeRequest(
     }, { once: true });
   }
 
+  // Filter cookies that match the request domain
+  const requestUrl = new URL(resolvedUrl.startsWith('http') ? resolvedUrl : `https://${resolvedUrl}`);
+  const matchingCookies = allCookies.filter(cookie => {
+    if (!cookie.enabled) return false;
+    // Check if cookie domain matches request domain
+    const cookieDomain = cookie.domain.startsWith('.') ? cookie.domain.substring(1) : cookie.domain;
+    const requestDomain = requestUrl.hostname;
+    return requestDomain === cookieDomain || requestDomain.endsWith('.' + cookieDomain);
+  });
+
   const result = await sendRequest({
     method: tab.method,
     url: resolvedUrl,
@@ -74,6 +85,7 @@ export async function executeRequest(
     bodyFormData: resolvedFormData,
     bodyUrlEncoded: resolvedUrlEncoded,
     proxy: proxySettings,
+    cookies: matchingCookies,
   });
 
   if (result.cancelled) {
