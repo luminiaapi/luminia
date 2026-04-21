@@ -171,27 +171,6 @@ wails build -platform linux/amd64
 
 ---
 
-## **📂 Project Structure**
-
-```
-lumina/
-├── frontend/              # React + TypeScript UI
-│   ├── src/
-│   │   ├── components/   # React components
-│   │   ├── store/        # Zustand state management
-│   │   ├── lib/          # Utilities & helpers
-│   │   ├── hooks/        # Custom React hooks
-│   │   └── use-cases/    # Business logic
-│   └── wailsjs/          # Wails Go bindings
-├── app.go                # Main app logic
-├── http.go               # HTTP client
-├── store.go              # SQLite persistence
-├── main.go               # Entry point
-└── wails.json            # Wails config
-```
-
----
-
 ## **💾 Data Storage**
 
 All data is stored locally in SQLite:
@@ -242,7 +221,11 @@ Please read our contributing guidelines before submitting PRs.
 
 ## **📝 License**
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the [MIT License](LICENSE) - see the [LICENSE](LICENSE) file for details.
+
+```
+MIT License - Copyright (c) 2026 Lumina
+```
 
 ---
 
