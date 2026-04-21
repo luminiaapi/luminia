@@ -10,9 +10,7 @@ type App struct {
 	store *Store
 }
 
-func NewApp() *App {
-	return &App{}
-}
+func NewApp() *App { return &App{} }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
@@ -22,6 +20,14 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 	a.store = store
+}
+
+// guard returns an error if the store is not initialised.
+func (a *App) guard() error {
+	if a.store == nil {
+		return fmt.Errorf("store not initialized")
+	}
+	return nil
 }
 
 // ── Collections ───────────────────────────────────────────────────────────────
@@ -34,8 +40,8 @@ func (a *App) LoadCollections(workspaceID string) ([]CollectionNode, error) {
 }
 
 func (a *App) SaveCollections(workspaceID string, collections []CollectionNode) error {
-	if a.store == nil {
-		return fmt.Errorf("store not initialized")
+	if err := a.guard(); err != nil {
+		return err
 	}
 	return a.store.SaveCollections(workspaceID, collections)
 }
@@ -50,8 +56,8 @@ func (a *App) LoadEnvironments(workspaceID string) ([]Environment, error) {
 }
 
 func (a *App) SaveEnvironments(workspaceID string, environments []Environment) error {
-	if a.store == nil {
-		return fmt.Errorf("store not initialized")
+	if err := a.guard(); err != nil {
+		return err
 	}
 	return a.store.SaveEnvironments(workspaceID, environments)
 }
@@ -59,8 +65,8 @@ func (a *App) SaveEnvironments(workspaceID string, environments []Environment) e
 // ── History ───────────────────────────────────────────────────────────────────
 
 func (a *App) AddHistory(entry HistoryEntry) error {
-	if a.store == nil {
-		return fmt.Errorf("store not initialized")
+	if err := a.guard(); err != nil {
+		return err
 	}
 	return a.store.AddHistory(entry)
 }
@@ -73,17 +79,17 @@ func (a *App) LoadHistory(limit int) ([]HistoryEntry, error) {
 }
 
 func (a *App) ClearHistory() error {
-	if a.store == nil {
-		return fmt.Errorf("store not initialized")
+	if err := a.guard(); err != nil {
+		return err
 	}
 	return a.store.ClearHistory()
 }
 
-// ── KV (sessions, login, settings) ───────────────────────────────────────────
+// ── KV ────────────────────────────────────────────────────────────────────────
 
 func (a *App) SetKV(key, value string) error {
-	if a.store == nil {
-		return fmt.Errorf("store not initialized")
+	if err := a.guard(); err != nil {
+		return err
 	}
 	return a.store.SetKV(key, value)
 }
@@ -96,8 +102,8 @@ func (a *App) GetKV(key string) (string, error) {
 }
 
 func (a *App) DeleteKV(key string) error {
-	if a.store == nil {
-		return fmt.Errorf("store not initialized")
+	if err := a.guard(); err != nil {
+		return err
 	}
 	return a.store.DeleteKV(key)
 }
