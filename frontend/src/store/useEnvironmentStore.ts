@@ -1,14 +1,14 @@
 import { create } from 'zustand';
 import { Environment } from '../types';
 import { isWailsAvailable, saveEnvironments } from '../lib/wails';
+import { generateId } from '../utils/idGenerator';
+import { createDebouncedSave } from '../utils/storageHelpers';
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
+const debouncedSave = createDebouncedSave(400);
+
 function scheduleSave(workspaceId: string, environments: Environment[]) {
   if (!isWailsAvailable()) return;
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    saveEnvironments(workspaceId, environments).catch(console.error);
-  }, 400);
+  debouncedSave.schedule(() => saveEnvironments(workspaceId, environments));
 }
 
 interface EnvironmentState {
@@ -33,7 +33,7 @@ export const useEnvironmentStore = create<EnvironmentState>()((set, get) => ({
   setActiveEnvironmentId: (id) => set({ activeEnvironmentId: id }),
 
   createEnvironment: () => {
-    const id = Math.random().toString(36).substring(2, 9);
+    const id = generateId();
     const newEnv: Environment = { id, name: 'New Environment', variables: [] };
     set((state) => {
       const next = [newEnv, ...state.environments];

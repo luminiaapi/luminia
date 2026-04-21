@@ -1,23 +1,15 @@
 import { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, FileJson, Cloud, Moon, Send, Upload, FileCode, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, FileJson, Upload, CheckCircle, AlertCircle } from 'lucide-react';
 import { Collection } from '../types';
 import { importPostmanCollection } from '../lib/importers/postman';
+import { IMPORT_OPTIONS, ImportType } from '../constants/importOptions';
 
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImportCollection: (collection: Collection) => void;
 }
-
-const options = [
-  { id: 'postman',    name: 'Postman',     description: 'Import Postman Collections (v2.0/v2.1)', icon: <Send className="w-5 h-5" />,     color: 'text-orange-400' },
-  { id: 'openapi',   name: 'OpenAPI',     description: 'Import from Swagger or OpenAPI 3.0/3.1',  icon: <FileCode className="w-5 h-5" />, color: 'text-blue-400' },
-  { id: 'hoppscotch',name: 'Hoppscotch',  description: 'Import Hoppscotch collection JSON files', icon: <Cloud className="w-5 h-5" />,    color: 'text-emerald-400' },
-  { id: 'insomnia',  name: 'Insomnia',    description: 'Import Insomnia export JSON files',       icon: <Moon className="w-5 h-5" />,     color: 'text-purple-400' },
-] as const;
-
-type ImportType = typeof options[number]['id'];
 
 export function ImportModal({ isOpen, onClose, onImportCollection }: ImportModalProps) {
   const [selected, setSelected] = useState<ImportType | null>(null);
@@ -32,8 +24,9 @@ export function ImportModal({ isOpen, onClose, onImportCollection }: ImportModal
     setSelected(id);
     setStatus('idle');
     setErrorMsg('');
-    // Only Postman is implemented — trigger file picker immediately
-    if (id === 'postman') {
+    // Only enabled importers trigger file picker
+    const option = IMPORT_OPTIONS.find(opt => opt.id === id);
+    if (option?.enabled) {
       setTimeout(() => fileRef.current?.click(), 50);
     }
   };
@@ -95,14 +88,14 @@ export function ImportModal({ isOpen, onClose, onImportCollection }: ImportModal
 
             {/* Options */}
             <div className="p-6 grid grid-cols-1 gap-3">
-              {options.map((opt) => (
+              {IMPORT_OPTIONS.map((opt) => (
                 <button key={opt.id} onClick={() => handleSelect(opt.id)}
                   className={`flex items-center gap-4 p-4 rounded-2xl border transition-all text-left group
                     ${selected === opt.id
                       ? 'border-brand-accent/50 bg-brand-accent/5'
                       : 'bg-white/[0.02] border-white/5 hover:border-brand-accent/30 hover:bg-white/[0.06]'}
-                    ${opt.id !== 'postman' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  disabled={opt.id !== 'postman'}
+                    ${!opt.enabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={!opt.enabled}
                 >
                   <div className={`w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center ${opt.color} group-hover:scale-110 transition-transform`}>
                     {opt.icon}
@@ -110,7 +103,7 @@ export function ImportModal({ isOpen, onClose, onImportCollection }: ImportModal
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-black text-white group-hover:text-brand-accent transition-colors flex items-center gap-2">
                       {opt.name}
-                      {opt.id !== 'postman' && <span className="text-[9px] bg-white/10 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest text-text-dim">Soon</span>}
+                      {!opt.enabled && <span className="text-[9px] bg-white/10 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest text-text-dim">Soon</span>}
                     </div>
                     <div className="text-[11px] text-text-dim opacity-60 leading-tight mt-0.5">{opt.description}</div>
                   </div>

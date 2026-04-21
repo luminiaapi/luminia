@@ -111,7 +111,7 @@ export function VariableInput({
           <span 
             key={match.index} 
             data-var-name={varName}
-            className={`env-var-tag ${exists ? 'text-brand-accent brightness-150' : 'text-danger'} font-bold bg-white/5 px-0.5 rounded shadow-[0_0_12px_rgba(139,92,246,0.4)]`}
+            className={`env-var-tag ${exists ? 'text-yellow-600' : 'text-danger'} font-bold bg-white/5 rounded `}
           >
             {envVar}
           </span>

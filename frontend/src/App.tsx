@@ -28,28 +28,13 @@ import { useHistoryStore } from './store/useHistoryStore';
 
 import { useResponsePanel } from './hooks/useResponsePanel';
 import { executeRequest } from './use-cases/requestExecutor';
+import { findCollectionById } from './utils/collectionHelpers';
+import { generateId } from './utils/idGenerator';
 import {
   waitForWails, isWailsAvailable,
   loadCollections, loadEnvironments, loadHistory,
   getKV, setKV, deleteKV, cancelRequest,
 } from './lib/wails';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function findCollectionRecursive(cols: Collection[], id: string): Collection | undefined {
-  for (const c of cols) {
-    if (c.id === id) return c;
-    if (c.children) {
-      const found = findCollectionRecursive(c.children, id);
-      if (found) return found;
-    }
-  }
-  return undefined;
-}
-
-function uid() {
-  return Math.random().toString(36).substring(2, 9);
-}
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
@@ -194,7 +179,7 @@ export default function App() {
     setTimeout(() => {
       const allCols = useCollectionStore.getState().collections;
       const newCol = parentId
-        ? findCollectionRecursive(allCols, parentId)?.children?.[0]
+        ? findCollectionById(allCols, parentId)?.children?.[0]
         : allCols[0];
       if (newCol) openEditModal('collection', newCol.id, newCol.name, parentId);
     }, 0);
@@ -203,7 +188,7 @@ export default function App() {
   const handleAddRequestToCollection = useCallback((id: string) => {
     addRequestToCollection(id);
     setTimeout(() => {
-      const col = findCollectionRecursive(useCollectionStore.getState().collections, id);
+      const col = findCollectionById(useCollectionStore.getState().collections, id);
       const newReq = col?.items[0];
       if (newReq) openEditModal('request', newReq.id, newReq.name, id);
     }, 0);
@@ -214,7 +199,7 @@ export default function App() {
     const { type, id, parentId } = modals.edit;
     editItem(type, id, newName, parentId);
     if (type === 'request' && parentId) {
-      const req = findCollectionRecursive(useCollectionStore.getState().collections, parentId)
+      const req = findCollectionById(useCollectionStore.getState().collections, parentId)
         ?.items.find(i => i.id === id);
       if (req) setTabs(tabs.map(t => (t.url === req.url && t.method === req.method) ? { ...t, name: newName } : t));
     }
@@ -222,7 +207,7 @@ export default function App() {
   }, [modals.edit, editItem, setTabs, tabs, closeEditModal]);
 
   const handleExport = useCallback((id: string) => {
-    const col = findCollectionRecursive(collections, id);
+    const col = findCollectionById(collections, id);
     if (!col) return;
     const a = document.createElement('a');
     a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(col, null, 2));
@@ -299,9 +284,13 @@ export default function App() {
       }
       if (result.response.status) {
         useHistoryStore.getState().addEntry({
-          id: uid(), method: activeTab.method, url: activeTab.url,
-          name: activeTab.name, status: result.response.status,
-          duration: result.response.time || '', timestamp: new Date().toISOString(),
+          id: generateId(),
+          method: activeTab.method,
+          url: activeTab.url,
+          name: activeTab.name,
+          status: result.response.status,
+          duration: result.response.time || '',
+          timestamp: new Date().toISOString(),
         });
       }
       updateActiveTab({ isSending: false, response: result.response, abortController: null });
@@ -342,7 +331,7 @@ export default function App() {
   const handleAddVariable = useCallback(() => {
     if (!activeEnv) return;
     updateEnvironment(activeEnvironmentId!, {
-      variables: [...activeEnv.variables, { id: uid(), key: 'new_var', value: 'value', enabled: true }],
+      variables: [...activeEnv.variables, { id: generateId(), key: 'new_var', value: 'value', enabled: true }],
     });
   }, [activeEnv, activeEnvironmentId, updateEnvironment]);
 

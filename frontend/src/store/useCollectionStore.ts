@@ -1,20 +1,20 @@
 import { create } from 'zustand';
 import { Collection, RequestItem } from '../types';
 import { isWailsAvailable, saveCollections } from '../lib/wails';
+import { generateId } from '../utils/idGenerator';
+import { mapCollections } from '../utils/collectionHelpers';
+import { createDebouncedSave } from '../utils/storageHelpers';
 
-// Debounced save helper â€” keyed by workspaceId
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
+const debouncedSave = createDebouncedSave(400);
+
 function scheduleSave(workspaceId: string, collections: Collection[]) {
   if (!isWailsAvailable()) return;
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    saveCollections(workspaceId, collections).catch(console.error);
-  }, 400);
+  debouncedSave.schedule(() => saveCollections(workspaceId, collections));
 }
+
 function immediateSave(workspaceId: string, collections: Collection[]) {
   if (!isWailsAvailable()) return;
-  if (saveTimer) clearTimeout(saveTimer);
-  saveCollections(workspaceId, collections).catch(console.error);
+  debouncedSave.immediate(() => saveCollections(workspaceId, collections));
 }
 
 interface CollectionState {
@@ -32,8 +32,14 @@ interface CollectionState {
   moveRequestToCollection: (requestId: string, sourceId: string, destId: string) => void;
 }
 
-const recurse = (cols: Collection[], fn: (c: Collection) => Collection): Collection[] =>
-  cols.map(c => ({ ...fn(c), children: c.children ? recurse(c.children, fn) : [] }));
+// Alias for better readability in this context
+const recurse = mapCollections;
+
+function removeCollectionRecursively(collections: Collection[], id: string): Collection[] {
+  return collections
+    .filter(c => c.id !== id)
+    .map(c => ({ ...c, children: c.children ? removeCollectionRecursively(c.children, id) : [] }));
+}
 
 export const useCollectionStore = create<CollectionState>()((set, get) => ({
   collections: [],
@@ -43,28 +49,25 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
 
   setCollections: (collections) => {
     set({ collections });
-    if (isWailsAvailable()) {
-      if (saveTimer) clearTimeout(saveTimer);
-      saveCollections(get().workspaceId, collections).catch(console.error);
-    }
+    immediateSave(get().workspaceId, collections);
   },
 
   createCollection: (parentId, name = 'New Collection') => {
     const newCol: Collection = {
-      id: Math.random().toString(36).substring(2, 9),
-      name, collapsed: false, items: [], children: []
+      id: generateId(),
+      name,
+      collapsed: false,
+      items: [],
+      children: []
     };
     set((state) => {
-      let next: Collection[];
-      if (!parentId) {
-        next = [newCol, ...state.collections];
-      } else {
-        next = recurse(state.collections, c =>
-          c.id === parentId
-            ? { ...c, collapsed: false, children: [newCol, ...(c.children || [])] }
-            : c
-        );
-      }
+      const next = !parentId
+        ? [newCol, ...state.collections]
+        : recurse(state.collections, c =>
+            c.id === parentId
+              ? { ...c, collapsed: false, children: [newCol, ...(c.children || [])] }
+              : c
+          );
       scheduleSave(get().workspaceId, next);
       return { collections: next };
     });
@@ -82,8 +85,10 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
 
   addRequestToCollection: (id) => {
     const newReq: RequestItem = {
-      id: Math.random().toString(36).substring(2, 9),
-      name: 'New Request', method: 'GET', url: '',
+      id: generateId(),
+      name: 'New Request',
+      method: 'GET',
+      url: '',
       timestamp: new Date().toISOString()
     };
     set((state) => {
@@ -100,11 +105,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
       const next = recurse(state.collections, c =>
         c.id === collectionId ? { ...c, collapsed: false, items: [...c.items, item] } : c
       );
-      // Immediate save for explicit user action
-      if (isWailsAvailable()) {
-        if (saveTimer) clearTimeout(saveTimer);
-        saveCollections(get().workspaceId, next).catch(console.error);
-      }
+      immediateSave(get().workspaceId, next);
       return { collections: next };
     });
   },
@@ -130,27 +131,18 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
           ? { ...c, items: c.items.map(i => i.id === requestId ? { ...i, ...updates } : i) }
           : c
       );
-      // Immediate save
-      if (isWailsAvailable()) {
-        if (saveTimer) clearTimeout(saveTimer);
-        saveCollections(get().workspaceId, next).catch(console.error);
-      }
+      immediateSave(get().workspaceId, next);
       return { collections: next };
     });
   },
 
   deleteItem: (type, id, parentId) => {
     set((state) => {
-      let next: Collection[];
-      if (type === 'collection') {
-        const del = (cols: Collection[]): Collection[] =>
-          cols.filter(c => c.id !== id).map(c => ({ ...c, children: c.children ? del(c.children) : [] }));
-        next = del(state.collections);
-      } else {
-        next = recurse(state.collections, c =>
-          c.id === parentId ? { ...c, items: c.items.filter(i => i.id !== id) } : c
-        );
-      }
+      const next = type === 'collection'
+        ? removeCollectionRecursively(state.collections, id)
+        : recurse(state.collections, c =>
+            c.id === parentId ? { ...c, items: c.items.filter(i => i.id !== id) } : c
+          );
       scheduleSave(get().workspaceId, next);
       return { collections: next };
     });

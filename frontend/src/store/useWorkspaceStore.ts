@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import { Server, Workspace } from '../types';
 import { isWailsAvailable, setKV, getKV } from '../lib/wails';
+import { generateId } from '../utils/idGenerator';
 
 const LOCAL_SERVER_ID = 'local';
 const LOCAL_WORKSPACE_ID = 'local-default';
+const KV_KEY = 'workspace_state';
 
 const defaultLocalServer: Server = {
   id: LOCAL_SERVER_ID,
@@ -15,8 +17,6 @@ const defaultLocalServer: Server = {
     { id: LOCAL_WORKSPACE_ID, name: 'My Workspace', serverId: LOCAL_SERVER_ID },
   ],
 };
-
-const KV_KEY = 'workspace_state';
 
 interface PersistedState {
   servers: Server[];
@@ -108,8 +108,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   },
 
   addServer: (name, url) => {
-    const serverId = Math.random().toString(36).substring(2, 9);
-    const wsId = Math.random().toString(36).substring(2, 9);
+    const serverId = generateId();
+    const wsId = generateId();
     const newServer: Server = {
       id: serverId, name, url,
       isConnected: false, status: 'disconnected',
@@ -153,7 +153,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   setActiveWorkspaceMode: (mode) => set({ activeWorkspaceMode: mode }),
 
   addWorkspace: (serverId, name) => {
-    const wsId = Math.random().toString(36).substring(2, 9);
+    const wsId = generateId();
     set(state => {
       const servers = state.servers.map(s =>
         s.id === serverId ? { ...s, workspaces: [...s.workspaces, { id: wsId, name, serverId }] } : s

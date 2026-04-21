@@ -6,6 +6,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { HttpMethod, RequestTab, KeyValuePair, RequestItem } from '../types';
+import { generateId } from '../utils/idGenerator';
+import { syncUrlWithParams, extractPathVariables, parseQueryParams } from '../utils/urlHelpers';
+import { createEmptyKeyValuePair, ensureEmptyRow } from '../utils/keyValueHelpers';
 
 interface TabState {
   tabs: RequestTab[];
@@ -34,75 +37,24 @@ const createDefaultTab = (id: string, name = 'Untitled Request', method: HttpMet
   name,
   collectionId,
   isDirty: false,
-  params: [{ id: Math.random().toString(36).substr(2, 9), key: '', value: '', enabled: true, type: 'text' }],
+  params: [createEmptyKeyValuePair()],
   pathVariables: [],
-  headers: [{ id: Math.random().toString(36).substr(2, 9), key: '', value: '', enabled: true, type: 'text' }],
+  headers: [createEmptyKeyValuePair()],
   auth: { type: 'none' },
   bodyType: (method === 'GET' || method === 'DELETE') ? 'none' : 'json',
   body: '',
-  bodyFormData: [{ id: Math.random().toString(36).substr(2, 9), key: '', value: '', enabled: true, type: 'text' }],
-  bodyUrlEncoded: [{ id: Math.random().toString(36).substr(2, 9), key: '', value: '', enabled: true, type: 'text' }],
+  bodyFormData: [createEmptyKeyValuePair()],
+  bodyUrlEncoded: [createEmptyKeyValuePair()],
   response: null,
   isSending: false
 });
 
-const syncUrlWithParams = (url: string, params: KeyValuePair[]) => {
-  const baseUrl = url.split('?')[0];
-  const searchParams = params
-    .filter(p => p.enabled && p.key)
-    .map(p => {
-      // Simple encoding that preserves {{...}}
-      const encoder = (s: string) => encodeURIComponent(s)
-        .replace(/%7B%7B/g, '{{')
-        .replace(/%7D%7D/g, '}}');
-      return `${encoder(p.key)}=${encoder(p.value)}`;
-    })
-    .join('&');
-  
-  return searchParams ? `${baseUrl}?${searchParams}` : baseUrl;
-};
-
 const parseUrl = (url: string, currentTab: RequestTab): Partial<RequestTab> => {
-  const updates: Partial<RequestTab> = { url };
-  
-  // Handle Path Variables
-  const pathVarMatches = url.match(/:[a-zA-Z0-9_]+/g);
-  if (pathVarMatches) {
-    const uniqueVars = Array.from(new Set(pathVarMatches.map(m => m.substring(1))));
-    const currentVars = currentTab.pathVariables || [];
-    const newPathVars = uniqueVars.map(key => {
-      const existing = currentVars.find(v => v.key === key);
-      return existing || { id: Math.random().toString(36).substr(2, 9), key, value: '', enabled: true };
-    });
-    updates.pathVariables = newPathVars;
-  } else {
-    updates.pathVariables = [];
-  }
-
-  // Handle Query Parameters - Always sync from URL if URL was modified
-  const parts = url.split('?');
-  const queryString = parts.length > 1 ? parts[1] : '';
-
-  const newParams: KeyValuePair[] = [];
-  if (queryString) {
-    const pairs = queryString.split('&');
-    pairs.forEach(pair => {
-      if (!pair) return;
-      const [key, value] = pair.split('=');
-      newParams.push({
-        id: Math.random().toString(36).substr(2, 9),
-        key: decodeURIComponent(key || ''),
-        value: decodeURIComponent(value || ''),
-        enabled: true,
-        type: 'text'
-      });
-    });
-  }
-  // Always add an empty row at the end for the editor
-  newParams.push({ id: Math.random().toString(36).substr(2, 9), key: '', value: '', enabled: true, type: 'text' });
-  updates.params = newParams;
-  
-  return updates;
+  return {
+    url,
+    pathVariables: extractPathVariables(url, currentTab.pathVariables),
+    params: parseQueryParams(url)
+  };
 };
 
 export const useTabStore = create<TabState>()(
@@ -150,17 +102,14 @@ export const useTabStore = create<TabState>()(
           tabs: state.tabs.map((t) => {
             if (t.id === state.activeTabId) {
               const currentList = t[field] || [];
-              const newList = currentList.map((item) => (item.id === id ? { ...item, ...updates } : item));
+              let newList = currentList.map((item) => (item.id === id ? { ...item, ...updates } : item));
+              
               if (field !== 'pathVariables') {
-                const lastItem = newList[newList.length - 1];
-                if (lastItem && (lastItem.key || lastItem.value)) {
-                  newList.push({ id: Math.random().toString(36).substr(2, 9), key: '', value: '', enabled: true, type: 'text' });
-                }
+                newList = ensureEmptyRow(newList);
               }
-              let newUrl = t.url;
-              if (field === 'params') {
-                newUrl = syncUrlWithParams(t.url, newList);
-              }
+              
+              const newUrl = field === 'params' ? syncUrlWithParams(t.url, newList) : t.url;
+              
               return { ...t, [field]: newList, url: newUrl, isDirty: t.collectionId ? true : false };
             }
             return t;
@@ -173,7 +122,7 @@ export const useTabStore = create<TabState>()(
           tabs: state.tabs.map((t) => {
             if (t.id === state.activeTabId) {
               const currentList = t[field] || [];
-              const newList = [...currentList, { id: Math.random().toString(36).substr(2, 9), key: '', value: '', enabled: true, type: 'text' }];
+              const newList = [...currentList, createEmptyKeyValuePair()];
               return { ...t, [field]: newList, isDirty: t.collectionId ? true : false };
             }
             return t;
@@ -187,13 +136,13 @@ export const useTabStore = create<TabState>()(
             if (t.id === state.activeTabId) {
               const currentList = t[field] || [];
               let newList = currentList.filter((item) => item.id !== id);
+              
               if (field !== 'pathVariables' && newList.length === 0) {
-                newList.push({ id: Math.random().toString(36).substr(2, 9), key: '', value: '', enabled: true, type: 'text' });
+                newList.push(createEmptyKeyValuePair());
               }
-              let newUrl = t.url;
-              if (field === 'params') {
-                newUrl = syncUrlWithParams(t.url, newList);
-              }
+              
+              const newUrl = field === 'params' ? syncUrlWithParams(t.url, newList) : t.url;
+              
               return { ...t, [field]: newList, url: newUrl, isDirty: t.collectionId ? true : false };
             }
             return t;
@@ -221,7 +170,7 @@ export const useTabStore = create<TabState>()(
       },
 
       addNewTab: () => {
-        const id = Math.random().toString(36).substr(2, 9);
+        const id = generateId();
         const newTab = createDefaultTab(id);
         set((state) => ({ tabs: [...state.tabs, newTab], activeTabId: id }));
       },
