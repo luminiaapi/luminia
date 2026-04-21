@@ -22,24 +22,24 @@ export function GetKV(arg1) {
   return window['go']['main']['App']['GetKV'](arg1);
 }
 
-export function LoadCollections() {
-  return window['go']['main']['App']['LoadCollections']();
+export function LoadCollections(arg1) {
+  return window['go']['main']['App']['LoadCollections'](arg1);
 }
 
-export function LoadEnvironments() {
-  return window['go']['main']['App']['LoadEnvironments']();
+export function LoadEnvironments(arg1) {
+  return window['go']['main']['App']['LoadEnvironments'](arg1);
 }
 
 export function LoadHistory(arg1) {
   return window['go']['main']['App']['LoadHistory'](arg1);
 }
 
-export function SaveCollections(arg1) {
-  return window['go']['main']['App']['SaveCollections'](arg1);
+export function SaveCollections(arg1, arg2) {
+  return window['go']['main']['App']['SaveCollections'](arg1, arg2);
 }
 
-export function SaveEnvironments(arg1) {
-  return window['go']['main']['App']['SaveEnvironments'](arg1);
+export function SaveEnvironments(arg1, arg2) {
+  return window['go']['main']['App']['SaveEnvironments'](arg1, arg2);
 }
 
 export function SendRequest(arg1) {

@@ -20,12 +20,12 @@ export function isWailsAvailable(): boolean {
 const go = () => (window as any).go.main.App;
 
 // ── Collections ───────────────────────────────────────────────────────────────
-export const loadCollections  = (): Promise<any[]>   => go().LoadCollections();
-export const saveCollections  = (c: any[]): Promise<void> => go().SaveCollections(c);
+export const loadCollections  = (workspaceId: string): Promise<any[]>   => go().LoadCollections(workspaceId);
+export const saveCollections  = (workspaceId: string, c: any[]): Promise<void> => go().SaveCollections(workspaceId, c);
 
 // ── Environments ──────────────────────────────────────────────────────────────
-export const loadEnvironments = (): Promise<any[]>   => go().LoadEnvironments();
-export const saveEnvironments = (e: any[]): Promise<void> => go().SaveEnvironments(e);
+export const loadEnvironments = (workspaceId: string): Promise<any[]>   => go().LoadEnvironments(workspaceId);
+export const saveEnvironments = (workspaceId: string, e: any[]): Promise<void> => go().SaveEnvironments(workspaceId, e);
 
 // ── History ───────────────────────────────────────────────────────────────────
 export const addHistory   = (entry: any): Promise<void>  => go().AddHistory(entry);

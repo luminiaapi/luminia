@@ -12,15 +12,15 @@ export function DeleteKV(arg1:string):Promise<void>;
 
 export function GetKV(arg1:string):Promise<string>;
 
-export function LoadCollections():Promise<Array<main.CollectionNode>>;
+export function LoadCollections(arg1:string):Promise<Array<main.CollectionNode>>;
 
-export function LoadEnvironments():Promise<Array<main.Environment>>;
+export function LoadEnvironments(arg1:string):Promise<Array<main.Environment>>;
 
 export function LoadHistory(arg1:number):Promise<Array<main.HistoryEntry>>;
 
-export function SaveCollections(arg1:Array<main.CollectionNode>):Promise<void>;
+export function SaveCollections(arg1:string,arg2:Array<main.CollectionNode>):Promise<void>;
 
-export function SaveEnvironments(arg1:Array<main.Environment>):Promise<void>;
+export function SaveEnvironments(arg1:string,arg2:Array<main.Environment>):Promise<void>;
 
 export function SendRequest(arg1:main.HTTPRequest):Promise<main.HTTPResponse>;
 

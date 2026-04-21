@@ -26,34 +26,34 @@ func (a *App) startup(ctx context.Context) {
 
 // ── Collections ───────────────────────────────────────────────────────────────
 
-func (a *App) LoadCollections() ([]CollectionNode, error) {
+func (a *App) LoadCollections(workspaceID string) ([]CollectionNode, error) {
 	if a.store == nil {
 		return []CollectionNode{}, nil
 	}
-	return a.store.LoadCollections()
+	return a.store.LoadCollections(workspaceID)
 }
 
-func (a *App) SaveCollections(collections []CollectionNode) error {
+func (a *App) SaveCollections(workspaceID string, collections []CollectionNode) error {
 	if a.store == nil {
 		return fmt.Errorf("store not initialized")
 	}
-	return a.store.SaveCollections(collections)
+	return a.store.SaveCollections(workspaceID, collections)
 }
 
 // ── Environments ──────────────────────────────────────────────────────────────
 
-func (a *App) LoadEnvironments() ([]Environment, error) {
+func (a *App) LoadEnvironments(workspaceID string) ([]Environment, error) {
 	if a.store == nil {
 		return []Environment{}, nil
 	}
-	return a.store.LoadEnvironments()
+	return a.store.LoadEnvironments(workspaceID)
 }
 
-func (a *App) SaveEnvironments(environments []Environment) error {
+func (a *App) SaveEnvironments(workspaceID string, environments []Environment) error {
 	if a.store == nil {
 		return fmt.Errorf("store not initialized")
 	}
-	return a.store.SaveEnvironments(environments)
+	return a.store.SaveEnvironments(workspaceID, environments)
 }
 
 // ── History ───────────────────────────────────────────────────────────────────

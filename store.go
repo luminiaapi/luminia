@@ -125,8 +125,8 @@ func (s *Store) migrate() error {
 
 // ── Collections ───────────────────────────────────────────────────────────────
 
-func (s *Store) LoadCollections() ([]CollectionNode, error) {
-	row := s.db.QueryRow(`SELECT data FROM collections WHERE id = 'root'`)
+func (s *Store) LoadCollections(workspaceID string) ([]CollectionNode, error) {
+	row := s.db.QueryRow(`SELECT data FROM collections WHERE id = ?`, workspaceID)
 	var raw string
 	if err := row.Scan(&raw); err == sql.ErrNoRows {
 		return []CollectionNode{}, nil
@@ -137,22 +137,22 @@ func (s *Store) LoadCollections() ([]CollectionNode, error) {
 	return cols, json.Unmarshal([]byte(raw), &cols)
 }
 
-func (s *Store) SaveCollections(collections []CollectionNode) error {
+func (s *Store) SaveCollections(workspaceID string, collections []CollectionNode) error {
 	data, err := json.Marshal(collections)
 	if err != nil {
 		return err
 	}
 	_, err = s.db.Exec(
-		`INSERT INTO collections(id, data) VALUES('root', ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data`,
-		string(data),
+		`INSERT INTO collections(id, data) VALUES(?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data`,
+		workspaceID, string(data),
 	)
 	return err
 }
 
 // ── Environments ──────────────────────────────────────────────────────────────
 
-func (s *Store) LoadEnvironments() ([]Environment, error) {
-	row := s.db.QueryRow(`SELECT data FROM environments WHERE id = 'root'`)
+func (s *Store) LoadEnvironments(workspaceID string) ([]Environment, error) {
+	row := s.db.QueryRow(`SELECT data FROM environments WHERE id = ?`, workspaceID)
 	var raw string
 	if err := row.Scan(&raw); err == sql.ErrNoRows {
 		return []Environment{}, nil
@@ -163,14 +163,14 @@ func (s *Store) LoadEnvironments() ([]Environment, error) {
 	return envs, json.Unmarshal([]byte(raw), &envs)
 }
 
-func (s *Store) SaveEnvironments(environments []Environment) error {
+func (s *Store) SaveEnvironments(workspaceID string, environments []Environment) error {
 	data, err := json.Marshal(environments)
 	if err != nil {
 		return err
 	}
 	_, err = s.db.Exec(
-		`INSERT INTO environments(id, data) VALUES('root', ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data`,
-		string(data),
+		`INSERT INTO environments(id, data) VALUES(?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data`,
+		workspaceID, string(data),
 	)
 	return err
 }

@@ -106,13 +106,15 @@ export interface Cookie {
 export interface Workspace {
   id: string;
   name: string;
-  url: string | null; // null means Local
+  serverId: string; // which server this belongs to
+}
+
+export interface Server {
+  id: string;
+  name: string;
+  url: string | null; // null = local
   isConnected: boolean;
-  isLoggedIn?: boolean;
   status?: 'disconnected' | 'connecting' | 'connected' | 'authenticated';
   userEmail?: string;
-  user?: {
-    email: string;
-    name: string;
-  };
+  workspaces: Workspace[];
 }

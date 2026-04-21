@@ -28,6 +28,14 @@ export namespace main {
 	    name: string;
 	    url: string;
 	    timestamp: string;
+	    params?: number[];
+	    pathVariables?: number[];
+	    headers?: number[];
+	    auth?: number[];
+	    bodyType?: string;
+	    body?: string;
+	    bodyFormData?: number[];
+	    bodyUrlEncoded?: number[];
 	
 	    static createFrom(source: any = {}) {
 	        return new RequestItem(source);
@@ -40,6 +48,14 @@ export namespace main {
 	        this.name = source["name"];
 	        this.url = source["url"];
 	        this.timestamp = source["timestamp"];
+	        this.params = source["params"];
+	        this.pathVariables = source["pathVariables"];
+	        this.headers = source["headers"];
+	        this.auth = source["auth"];
+	        this.bodyType = source["bodyType"];
+	        this.body = source["body"];
+	        this.bodyFormData = source["bodyFormData"];
+	        this.bodyUrlEncoded = source["bodyUrlEncoded"];
 	    }
 	}
 	export class CollectionNode {

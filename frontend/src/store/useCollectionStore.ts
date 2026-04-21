@@ -2,18 +2,25 @@ import { create } from 'zustand';
 import { Collection, RequestItem } from '../types';
 import { isWailsAvailable, saveCollections } from '../lib/wails';
 
-// Debounced save helper
+// Debounced save helper â€” keyed by workspaceId
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-function scheduleSave(collections: Collection[]) {
+function scheduleSave(workspaceId: string, collections: Collection[]) {
   if (!isWailsAvailable()) return;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    saveCollections(collections).catch(console.error);
+    saveCollections(workspaceId, collections).catch(console.error);
   }, 400);
+}
+function immediateSave(workspaceId: string, collections: Collection[]) {
+  if (!isWailsAvailable()) return;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveCollections(workspaceId, collections).catch(console.error);
 }
 
 interface CollectionState {
   collections: Collection[];
+  workspaceId: string;
+  setWorkspaceId: (id: string) => void;
   setCollections: (collections: Collection[]) => void;
   createCollection: (parentId?: string, name?: string) => void;
   toggleCollection: (id: string) => void;
@@ -30,12 +37,15 @@ const recurse = (cols: Collection[], fn: (c: Collection) => Collection): Collect
 
 export const useCollectionStore = create<CollectionState>()((set, get) => ({
   collections: [],
+  workspaceId: 'local-default',
+
+  setWorkspaceId: (id) => set({ workspaceId: id }),
 
   setCollections: (collections) => {
     set({ collections });
     if (isWailsAvailable()) {
       if (saveTimer) clearTimeout(saveTimer);
-      saveCollections(collections).catch(console.error);
+      saveCollections(get().workspaceId, collections).catch(console.error);
     }
   },
 
@@ -55,7 +65,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
             : c
         );
       }
-      scheduleSave(next);
+      scheduleSave(get().workspaceId, next);
       return { collections: next };
     });
   },
@@ -65,7 +75,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
       const next = recurse(state.collections, c =>
         c.id === id ? { ...c, collapsed: !c.collapsed } : c
       );
-      scheduleSave(next);
+      scheduleSave(get().workspaceId, next);
       return { collections: next };
     });
   },
@@ -80,7 +90,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
       const next = recurse(state.collections, c =>
         c.id === id ? { ...c, collapsed: false, items: [newReq, ...c.items] } : c
       );
-      scheduleSave(next);
+      scheduleSave(get().workspaceId, next);
       return { collections: next };
     });
   },
@@ -93,7 +103,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
       // Immediate save for explicit user action
       if (isWailsAvailable()) {
         if (saveTimer) clearTimeout(saveTimer);
-        saveCollections(next).catch(console.error);
+        saveCollections(get().workspaceId, next).catch(console.error);
       }
       return { collections: next };
     });
@@ -108,7 +118,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
         }
         return c;
       });
-      scheduleSave(next);
+      scheduleSave(get().workspaceId, next);
       return { collections: next };
     });
   },
@@ -123,7 +133,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
       // Immediate save
       if (isWailsAvailable()) {
         if (saveTimer) clearTimeout(saveTimer);
-        saveCollections(next).catch(console.error);
+        saveCollections(get().workspaceId, next).catch(console.error);
       }
       return { collections: next };
     });
@@ -141,7 +151,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
           c.id === parentId ? { ...c, items: c.items.filter(i => i.id !== id) } : c
         );
       }
-      scheduleSave(next);
+      scheduleSave(get().workspaceId, next);
       return { collections: next };
     });
   },
@@ -160,7 +170,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
       const next = recurse(removed, c =>
         c.id === destId ? { ...c, items: [moved!, ...c.items] } : c
       );
-      scheduleSave(next);
+      scheduleSave(get().workspaceId, next);
       return { collections: next };
     });
   },

@@ -3,17 +3,19 @@ import { Environment } from '../types';
 import { isWailsAvailable, saveEnvironments } from '../lib/wails';
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-function scheduleSave(environments: Environment[]) {
+function scheduleSave(workspaceId: string, environments: Environment[]) {
   if (!isWailsAvailable()) return;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    saveEnvironments(environments).catch(console.error);
+    saveEnvironments(workspaceId, environments).catch(console.error);
   }, 400);
 }
 
 interface EnvironmentState {
   environments: Environment[];
   activeEnvironmentId: string | null;
+  workspaceId: string;
+  setWorkspaceId: (id: string) => void;
   setEnvironments: (environments: Environment[]) => void;
   setActiveEnvironmentId: (id: string | null) => void;
   createEnvironment: () => void;
@@ -21,10 +23,12 @@ interface EnvironmentState {
   deleteEnvironment: (id: string) => void;
 }
 
-export const useEnvironmentStore = create<EnvironmentState>()((set) => ({
+export const useEnvironmentStore = create<EnvironmentState>()((set, get) => ({
   environments: [],
   activeEnvironmentId: null,
+  workspaceId: 'local-default',
 
+  setWorkspaceId: (id) => set({ workspaceId: id }),
   setEnvironments: (environments) => set({ environments }),
   setActiveEnvironmentId: (id) => set({ activeEnvironmentId: id }),
 
@@ -33,7 +37,7 @@ export const useEnvironmentStore = create<EnvironmentState>()((set) => ({
     const newEnv: Environment = { id, name: 'New Environment', variables: [] };
     set((state) => {
       const next = [newEnv, ...state.environments];
-      scheduleSave(next);
+      scheduleSave(get().workspaceId, next);
       return { environments: next, activeEnvironmentId: id };
     });
   },
@@ -41,7 +45,7 @@ export const useEnvironmentStore = create<EnvironmentState>()((set) => ({
   updateEnvironment: (id, updates) => {
     set((state) => {
       const next = state.environments.map(e => e.id === id ? { ...e, ...updates } : e);
-      scheduleSave(next);
+      scheduleSave(get().workspaceId, next);
       return { environments: next };
     });
   },
@@ -52,7 +56,7 @@ export const useEnvironmentStore = create<EnvironmentState>()((set) => ({
       const newActiveId = state.activeEnvironmentId === id
         ? (next.length > 0 ? next[0].id : null)
         : state.activeEnvironmentId;
-      scheduleSave(next);
+      scheduleSave(get().workspaceId, next);
       return { environments: next, activeEnvironmentId: newActiveId };
     });
   },

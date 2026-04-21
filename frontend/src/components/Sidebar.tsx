@@ -11,31 +11,30 @@ import {
   Folder, 
   FolderOpen, 
   PlusCircle, 
-  Copy, 
   MoreVertical,
   Edit2,
   Trash2,
   ChevronLeft,
   FolderPlus,
   Globe,
-  LayoutGrid,
-  Link,
-  ShieldCheck,
   Zap,
   Upload,
-  Download
+  Download,
+  Server,
+  CheckCircle2,
+  LayoutGrid,
+  X
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { Collection, RequestItem, HttpMethod, Environment, Workspace } from '../types';
+import { Collection, RequestItem, HttpMethod, Environment, Server as ServerType, Workspace } from '../types';
 import { getMethodColor } from '../constants';
 import { useHistoryStore } from '../store/useHistoryStore';
+import { useWorkspaceStore } from '../store/useWorkspaceStore';
 
 interface SidebarProps {
   activeTab: 'history' | 'collections' | 'env' | 'settings' | 'workspaces';
   collections: Collection[];
   environments: Environment[];
-  workspaces: Workspace[];
-  activeWorkspaceId: string;
   activeEnvironmentId: string | null;
   onOpenRequest: (item: RequestItem, collectionId?: string) => void;
   onOpenEnvironment: (id: string) => void;
@@ -46,10 +45,7 @@ interface SidebarProps {
   onEdit: (type: 'collection' | 'request' | 'environment', id: string, name: string, parentId?: string) => void;
   onDelete: (type: 'collection' | 'request' | 'environment', id: string, parentId?: string) => void;
   onMoveRequest: (requestId: string, sourceId: string, destId: string) => void;
-  onSelectWorkspace: (id: string) => void;
-  onAddWorkspace: () => void;
-  onConnectWorkspace: (id: string) => void;
-  onDeleteWorkspace: (id: string) => void;
+  onAddServer: () => void;
   onImport: () => void;
   onExportCollection: (id: string) => void;
   width: number;
@@ -63,8 +59,6 @@ export function Sidebar({
   activeTab, 
   collections, 
   environments,
-  workspaces,
-  activeWorkspaceId,
   activeEnvironmentId,
   onOpenRequest, 
   onOpenEnvironment,
@@ -75,10 +69,7 @@ export function Sidebar({
   onEdit,
   onDelete,
   onMoveRequest,
-  onSelectWorkspace,
-  onAddWorkspace,
-  onConnectWorkspace,
-  onDeleteWorkspace,
+  onAddServer,
   onImport,
   onExportCollection,
   width,
@@ -88,17 +79,57 @@ export function Sidebar({
   onResizeStart
 }: SidebarProps) {
   const history = useHistoryStore((s) => s.history);
+  const {
+    servers, activeServerId, activeWorkspaceId,
+    setActiveServerId, setActiveWorkspaceId,
+    connectServer, removeServer, addWorkspace, removeWorkspace, renameWorkspace,
+  } = useWorkspaceStore();
+
+  // Collapsed state per server
+  const [collapsedServers, setCollapsedServers] = useState<Record<string, boolean>>({});
+  const toggleServer = (id: string) =>
+    setCollapsedServers(prev => ({ ...prev, [id]: !prev[id] }));
+
+  // Add Workspace modal state
+  const [addWsModal, setAddWsModal] = useState<{ serverId: string } | null>(null);
+  const [newWsName, setNewWsName] = useState('');
+
+  const handleAddWorkspace = () => {
+    if (!addWsModal || !newWsName.trim()) return;
+    const id = addWorkspace(addWsModal.serverId, newWsName.trim());
+    setActiveServerId(addWsModal.serverId);
+    setActiveWorkspaceId(id);
+    setAddWsModal(null);
+    setNewWsName('');
+  };
+
+  // Inline rename state — use ref for value to avoid re-render on each keystroke
+  const [editingWs, setEditingWs] = useState<{ serverId: string; wsId: string } | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const startEdit = (serverId: string, wsId: string, currentName: string) => {
+    setEditingWs({ serverId, wsId });
+    // Set value after mount
+    setTimeout(() => {
+      if (renameInputRef.current) {
+        renameInputRef.current.value = currentName;
+        renameInputRef.current.select();
+      }
+    }, 20);
+  };
+
+  const commitRename = () => {
+    if (!editingWs || !renameInputRef.current) return;
+    const name = renameInputRef.current.value.trim();
+    if (name) renameWorkspace(editingWs.serverId, editingWs.wsId, name);
+    setEditingWs(null);
+  };
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
-    
-    const requestId = result.draggableId;
-    const sourceId = result.source.droppableId;
-    const destId = result.destination.droppableId;
-
-    if (sourceId !== destId) {
-      onMoveRequest(requestId, sourceId, destId);
-    }
+    const { draggableId, source, destination } = result;
+    if (source.droppableId !== destination.droppableId)
+      onMoveRequest(draggableId, source.droppableId, destination.droppableId);
   };
 
   return (
@@ -122,7 +153,7 @@ export function Sidebar({
               </button>
             )}
             <button 
-              onClick={activeTab === 'collections' ? () => onCreateCollection() : (activeTab === 'env' ? onCreateEnvironment : (activeTab === 'workspaces' ? onAddWorkspace : undefined))}
+              onClick={activeTab === 'collections' ? () => onCreateCollection() : (activeTab === 'env' ? onCreateEnvironment : (activeTab === 'workspaces' ? onAddServer : undefined))}
               className="p-1.5 hover:bg-white/5 rounded-md transition-colors text-text-dim hover:text-text-main"
             >
               <Plus className="w-4 h-4" />
@@ -228,68 +259,154 @@ export function Sidebar({
           )}
 
           {activeTab === 'workspaces' && (
-            <div className="space-y-2">
-              {workspaces.map((ws) => (
-                <motion.div
-                  layout
-                  key={ws.id}
-                  onClick={() => onSelectWorkspace(ws.id)}
-                  className={`flex flex-col p-4 rounded-2xl cursor-pointer transition-all group border relative overflow-hidden ${
-                    activeWorkspaceId === ws.id 
-                      ? 'bg-brand-accent/10 border-brand-accent/30 shadow-[0_8px_30px_rgb(139,92,246,0.1)]' 
-                      : 'bg-transparent border-white/5 hover:bg-white/[0.02] hover:border-white/10'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 mb-3 relative z-10">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-                      activeWorkspaceId === ws.id ? 'bg-brand-accent text-white shadow-[0_0_15px_rgba(139,92,246,0.5)]' : 'bg-white/5 text-text-dim'
-                    }`}>
-                      {ws.url ? <Globe className="w-5 h-5" /> : <Zap className="w-5 h-5" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-black text-text-main group-hover:text-white transition-colors truncate">
-                          {ws.name}
-                        </span>
-                        {ws.isConnected && <div className="w-1.5 h-1.5 rounded-full bg-success shadow-[0_0_8px_rgba(16,185,129,0.5)] shrink-0" />}
+            <div className="space-y-2 px-1">
+              {servers.map((srv) => {
+                const isServerCollapsed = !!collapsedServers[srv.id];
+                return (
+                  <div key={srv.id}>
+                    {/* ── Server header ── */}
+                    <div className={`flex items-center gap-2 px-2 py-2 rounded-xl border transition-all cursor-pointer group
+                      ${activeServerId === srv.id ? 'border-brand-accent/30 bg-brand-accent/5' : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.04]'}`}
+                      onClick={() => toggleServer(srv.id)}>
+                      <ChevronRight className={`w-3 h-3 text-text-dim transition-transform shrink-0 ${isServerCollapsed ? '' : 'rotate-90'}`} />
+                      <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0
+                        ${srv.url === null ? 'bg-brand-accent/20 text-brand-accent' : 'bg-white/5 text-text-dim'}`}>
+                        {srv.url === null ? <Zap className="w-3 h-3" /> : <Server className="w-3 h-3" />}
                       </div>
-                      <div className="text-[10px] text-text-dim truncate opacity-60 font-mono">
-                        {ws.url || 'Local Workspace'}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-black text-text-main truncate">{srv.name}</div>
+                        <div className="text-[9px] text-text-dim opacity-50 truncate">
+                          {srv.url === null ? 'Local' : srv.isConnected ? '● Connected' : '○ Disconnected'}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-all"
+                        onClick={e => e.stopPropagation()}>
+                        <button title="Add Workspace"
+                          onClick={() => { setAddWsModal({ serverId: srv.id }); setNewWsName(''); }}
+                          className="p-1 text-text-dim hover:text-brand-accent transition-colors rounded">
+                          <Plus className="w-3 h-3" />
+                        </button>
+                        {srv.id !== 'local' && !srv.isConnected && (
+                          <button onClick={() => connectServer(srv.id)}
+                            className="p-1 text-text-dim hover:text-success transition-colors rounded">
+                            <CheckCircle2 className="w-3 h-3" />
+                          </button>
+                        )}
+                        {srv.id !== 'local' && (
+                          <button onClick={() => removeServer(srv.id)}
+                            className="p-1 text-text-dim hover:text-danger transition-colors rounded">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     </div>
-                    <div className="opacity-0 group-hover:opacity-100 transition-all">
-                      <ActionMenu 
-                        onEdit={() => {}} 
-                        onDelete={() => onDeleteWorkspace(ws.id)} 
-                      />
-                    </div>
+
+                    {/* ── Workspaces ── */}
+                    <AnimatePresence>
+                      {!isServerCollapsed && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.15 }}
+                          className="overflow-hidden pl-4 mt-0.5 space-y-0.5">
+                          {srv.workspaces.map((ws) => {
+                            const isActive = activeServerId === srv.id && activeWorkspaceId === ws.id;
+                            const isEditing = editingWs?.wsId === ws.id && editingWs?.serverId === srv.id;
+                            return (
+                              <div key={ws.id}
+                                onClick={() => { if (!isEditing) { setActiveServerId(srv.id); setActiveWorkspaceId(ws.id); } }}
+                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all group border
+                                  ${isActive ? 'bg-brand-accent/10 border-brand-accent/20 text-brand-accent' : 'border-transparent hover:bg-white/5 text-text-dim'}`}>
+                                <LayoutGrid className="w-3 h-3 shrink-0" />
+
+                                {isEditing ? (
+                                  <input
+                                    ref={renameInputRef}
+                                    defaultValue={ws.name}
+                                    onBlur={commitRename}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur(); } if (e.key === 'Escape') setEditingWs(null); }}
+                                    onClick={e => e.stopPropagation()}
+                                    className="flex-1 bg-transparent text-xs font-bold outline-none border-b border-brand-accent/50 text-white min-w-0"
+                                  />
+                                ) : (
+                                  <span className="text-xs font-bold flex-1 truncate">{ws.name}</span>
+                                )}
+
+                                {isActive && !isEditing && (
+                                  <div className="w-1.5 h-1.5 rounded-full bg-brand-accent shadow-[0_0_6px_rgba(139,92,246,0.6)] shrink-0" />
+                                )}
+
+                                {/* Edit & delete buttons */}
+                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                                  onClick={e => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => setEditingWs({ serverId: srv.id, wsId: ws.id })}
+                                    className="p-0.5 hover:text-brand-accent transition-colors">
+                                    <Edit2 className="w-2.5 h-2.5" />
+                                  </button>
+                                  {srv.workspaces.length > 1 && (
+                                    <button onClick={() => removeWorkspace(srv.id, ws.id)}
+                                      className="p-0.5 hover:text-danger transition-colors">
+                                      <Trash2 className="w-2.5 h-2.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
-
-                  {ws.url && !ws.isConnected && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onConnectWorkspace(ws.id); }}
-                      className="w-full py-1.5 text-[10px] font-black uppercase tracking-widest bg-brand-accent/20 text-brand-accent hover:bg-brand-accent hover:text-white rounded-lg transition-all border border-brand-accent/30"
-                    >
-                      Connect to Server
-                    </button>
-                  )}
-
-                  {ws.isConnected && ws.isLoggedIn && (
-                    <div className="flex items-center gap-2 px-2 py-1.5 bg-white/5 rounded-lg border border-white/5">
-                      <ShieldCheck className="w-3 h-3 text-success" />
-                      <span className="text-[10px] font-bold text-text-dim truncate">Logged in as {ws.user?.name}</span>
-                    </div>
-                  )}
-
-                  {activeWorkspaceId === ws.id && (
-                    <div className="absolute top-0 right-0 p-1 opacity-10">
-                      <LayoutGrid className="w-12 h-12 rotate-12" />
-                    </div>
-                  )}
-                </motion.div>
-              ))}
+                );
+              })}
             </div>
           )}
+
+          {/* ── Add Workspace Modal ── */}
+          <AnimatePresence>
+            {addWsModal && (
+              <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  onClick={() => setAddWsModal(null)}
+                  className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 16 }}
+                  className="relative w-full max-w-sm bg-bg-card border border-white/10 rounded-2xl shadow-2xl p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-brand-accent/20 flex items-center justify-center text-brand-accent">
+                        <LayoutGrid className="w-4 h-4" />
+                      </div>
+                      <h3 className="text-base font-black text-white">New Workspace</h3>
+                    </div>
+                    <button onClick={() => setAddWsModal(null)} className="p-1.5 hover:bg-white/5 rounded-lg text-text-dim">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <input
+                    autoFocus
+                    value={newWsName}
+                    onChange={e => setNewWsName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddWorkspace(); if (e.key === 'Escape') setAddWsModal(null); }}
+                    placeholder="Workspace name…"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-brand-accent/50 transition-all"
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={() => setAddWsModal(null)}
+                      className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/5 text-sm font-bold text-text-dim hover:text-white transition-all">
+                      Cancel
+                    </button>
+                    <button onClick={handleAddWorkspace} disabled={!newWsName.trim()}
+                      className="flex-1 py-2.5 rounded-xl bg-brand-accent text-white text-sm font-black disabled:opacity-40 hover:brightness-110 transition-all">
+                      Create
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
       

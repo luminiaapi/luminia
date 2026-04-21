@@ -56,6 +56,7 @@ import { useHistoryStore } from './store/useHistoryStore';
 import { useResponsePanel } from './hooks/useResponsePanel';
 import { executeRequest } from './use-cases/requestExecutor';
 import { waitForWails, isWailsAvailable, loadCollections, loadEnvironments, loadHistory, getKV, setKV, deleteKV, cancelRequest } from './lib/wails';
+import { loadWorkspaceStateFromDb } from './store/useWorkspaceStore';
 
 const DEFAULT_URL = 'https://api.lumina.io/v1/explore';
 
@@ -83,10 +84,11 @@ export default function App() {
   } = useEnvironmentStore();
 
   const {
-    workspaces, activeWorkspaceId, setActiveWorkspaceId, 
+    servers, activeServerId, activeWorkspaceId,
     activeWorkspaceMode, setActiveWorkspaceMode,
-    addWorkspace, connectWorkspace, loginToWorkspace, 
-    logoutFromWorkspace, removeWorkspace, getActiveWorkspace
+    addServer, addWorkspace,
+    loginToWorkspace, logoutFromWorkspace,
+    getActiveWorkspace
   } = useWorkspaceStore();
 
   const {
@@ -104,40 +106,70 @@ export default function App() {
 
   const responsePanel = useResponsePanel();
 
+  // ── Load data for a specific workspace ──────────────────────────────────────
+  const loadWorkspaceData = useCallback(async (wsId: string) => {
+    // Update workspaceId in stores so saves go to the right key
+    useCollectionStore.getState().setWorkspaceId(wsId);
+    useEnvironmentStore.getState().setWorkspaceId(wsId);
+
+    if (!isWailsAvailable()) return;
+
+    try {
+      const cols = await loadCollections(wsId);
+      useCollectionStore.getState().setCollections(Array.isArray(cols) && cols.length > 0 ? cols : []);
+    } catch (e) { console.error('loadCollections', e); }
+
+    try {
+      const envs = await loadEnvironments(wsId);
+      if (Array.isArray(envs) && envs.length > 0) {
+        useEnvironmentStore.getState().setEnvironments(envs);
+        useEnvironmentStore.getState().setActiveEnvironmentId(envs[0].id);
+      } else {
+        useEnvironmentStore.getState().setEnvironments([]);
+        useEnvironmentStore.getState().setActiveEnvironmentId(null);
+      }
+    } catch (e) { console.error('loadEnvironments', e); }
+  }, []);
+
   // ── Startup: load all data from SQLite ──────────────────────────────────────
   useEffect(() => {
     waitForWails().then(async () => {
       if (!isWailsAvailable()) return;
 
-      // Collections
-      try {
-        const cols = await loadCollections();
-        if (Array.isArray(cols) && cols.length > 0)
-          useCollectionStore.getState().setCollections(cols);
-      } catch (e) { console.error('loadCollections', e); }
+      // 1. Load workspace structure first
+      const wsState = await loadWorkspaceStateFromDb();
+      if (wsState) {
+        useWorkspaceStore.getState().loadFromDb(wsState);
+      }
 
-      // Environments
-      try {
-        const envs = await loadEnvironments();
-        if (Array.isArray(envs) && envs.length > 0) {
-          useEnvironmentStore.getState().setEnvironments(envs);
-          useEnvironmentStore.getState().setActiveEnvironmentId(envs[0].id);
-        }
-      } catch (e) { console.error('loadEnvironments', e); }
+      // 2. Load collections/environments for the active workspace
+      const activeWsId = useWorkspaceStore.getState().activeWorkspaceId;
+      await loadWorkspaceData(activeWsId);
 
-      // History
+      // 3. History
       try {
         const hist = await loadHistory(100);
         if (Array.isArray(hist)) useHistoryStore.getState().setHistory(hist);
       } catch (e) { console.error('loadHistory', e); }
 
-      // Login state from KV
+      // 4. Login state
       try {
         const email = await getKV('login_email');
         if (email) useUIStore.getState().handleLogin(email);
       } catch (e) { /* not logged in */ }
     });
   }, []);
+
+  // ── Reload data when workspace switches ─────────────────────────────────────
+  const prevWorkspaceId = useRef<string>(activeWorkspaceId);
+  useEffect(() => {
+    if (prevWorkspaceId.current === activeWorkspaceId) return;
+    prevWorkspaceId.current = activeWorkspaceId;
+    waitForWails().then(() => loadWorkspaceData(activeWorkspaceId));
+    // Switch sidebar to collections so user sees the new workspace's data
+    setActiveSidebarTab('collections');
+    setActiveWorkspaceMode('request');
+  }, [activeWorkspaceId, loadWorkspaceData]);
 
   // App Theme & Accent Color Effect
   useEffect(() => {
@@ -158,11 +190,6 @@ export default function App() {
     
     // Derived colors could be added here if needed
   }, [theme, accentColor]);
-
-  const handleSelectWorkspace = (id: string) => {
-    setActiveWorkspaceId(id);
-    setActiveWorkspaceMode('request');
-  };
 
   const onSetActiveTabWithMode = (id: string) => {
     setActiveWorkspaceMode('request');
@@ -363,13 +390,13 @@ export default function App() {
   const handleAppLogin = (email: string) => {
     onLogin(email);
     setKV('login_email', email).catch(console.error);
-    if (activeWorkspaceId !== 'local') loginToWorkspace(activeWorkspaceId, email);
+    if (activeServerId !== 'local') loginToWorkspace(activeServerId, email);
   };
 
   const handleAppLogout = () => {
     onLogout();
     deleteKV('login_email').catch(console.error);
-    if (activeWorkspaceId !== 'local') logoutFromWorkspace(activeWorkspaceId);
+    if (activeServerId !== 'local') logoutFromWorkspace(activeServerId);
   };
 
   const handleImportCollection = (collection: Collection) => {
@@ -441,8 +468,6 @@ export default function App() {
           activeTab={activeSidebarTab}
           collections={collections}
           environments={environments}
-          workspaces={workspaces}
-          activeWorkspaceId={activeWorkspaceId}
           activeEnvironmentId={activeEnvironmentId}
           onOpenRequest={openRequest}
           onOpenEnvironment={handleOpenEnvironment}
@@ -453,10 +478,7 @@ export default function App() {
           onEdit={openEditModal}
           onDelete={deleteItem}
           onMoveRequest={moveRequestToCollection}
-          onSelectWorkspace={handleSelectWorkspace}
-          onAddWorkspace={() => setWorkspaceModalOpen(true)}
-          onConnectWorkspace={connectWorkspace}
-          onDeleteWorkspace={removeWorkspace}
+          onAddServer={() => setWorkspaceModalOpen(true)}
           onImport={() => setImportModalOpen(true)}
           onExportCollection={handleExport}
           width={sidebarWidth}
@@ -574,7 +596,7 @@ export default function App() {
       <WorkspaceModal 
         isOpen={modals.workspace.isOpen}
         onClose={() => setWorkspaceModalOpen(false)}
-        onAdd={addWorkspace}
+        onAdd={addServer}
       />
 
       <ImportModal
