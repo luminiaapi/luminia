@@ -80,12 +80,12 @@ jobs:
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-      - name: Install frontend dependencies
+      - name: Configure pnpm for native modules
         run: |
           cd ${{ env.FRONTEND_PATH }}
-          pnpm install --no-frozen-lockfile
-          # Rebuild native modules for Linux
-          pnpm rebuild @tailwindcss/oxide
+          # Configure pnpm to use shamefully-hoist
+          echo "shamefully-hoist=true" > .npmrc
+          echo "node-linker=hoisted" >> .npmrc
 
       - name: Build application
         run: wails build -platform linux/amd64
@@ -143,17 +143,13 @@ jobs:
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-      - name: Install frontend dependencies
+      - name: Configure pnpm for native modules
         shell: pwsh
         run: |
           cd ${{ env.FRONTEND_PATH }}
-          # Clean install with shamefully-hoist for native modules
-          pnpm install --shamefully-hoist --no-frozen-lockfile
-          # Verify the native module exists
-          if (-not (Test-Path "node_modules/@tailwindcss/oxide")) {
-            Write-Error "Tailwind CSS oxide module not found"
-            exit 1
-          }
+          # Configure pnpm to use shamefully-hoist
+          "shamefully-hoist=true" | Out-File -FilePath .npmrc -Encoding utf8
+          "node-linker=hoisted" | Out-File -FilePath .npmrc -Append -Encoding utf8
 
       - name: Build application with NSIS installer
         shell: pwsh
