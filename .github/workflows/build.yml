@@ -166,7 +166,7 @@ jobs:
         shell: pwsh
         run: |
           cd ${{ env.FRONTEND_PATH }}
-          pnpm install --frozen-lockfile
+          pnpm install --no-frozen-lockfile
 
       - name: Build application with NSIS installer
         shell: pwsh
