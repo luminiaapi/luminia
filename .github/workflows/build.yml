@@ -81,7 +81,11 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
       - name: Install frontend dependencies
-        run: pnpm install --dir ${{ env.FRONTEND_PATH }}
+        run: |
+          cd ${{ env.FRONTEND_PATH }}
+          pnpm install --no-frozen-lockfile
+          # Rebuild native modules for Linux
+          pnpm rebuild @tailwindcss/oxide
 
       - name: Build application
         run: wails build -platform linux/amd64
@@ -128,14 +132,6 @@ jobs:
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $env:GITHUB_ENV
 
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
@@ -151,9 +147,13 @@ jobs:
         shell: pwsh
         run: |
           cd ${{ env.FRONTEND_PATH }}
-          pnpm install --no-frozen-lockfile
-          # Rebuild native modules for Windows
-          pnpm rebuild @tailwindcss/oxide
+          # Clean install with shamefully-hoist for native modules
+          pnpm install --shamefully-hoist --no-frozen-lockfile
+          # Verify the native module exists
+          if (-not (Test-Path "node_modules/@tailwindcss/oxide")) {
+            Write-Error "Tailwind CSS oxide module not found"
+            exit 1
+          }
 
       - name: Build application with NSIS installer
         shell: pwsh
