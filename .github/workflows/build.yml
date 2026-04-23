@@ -54,6 +54,11 @@ jobs:
         with:
           node-version: '18'
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
@@ -74,14 +79,6 @@ jobs:
 
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
-
-      - name: Configure Wails to use npm
-        run: |
-          cd ${{ env.WORKSPACE_PATH }}
-          # Update wails.json to use npm instead of pnpm
-          sed -i 's/"frontend:install": "pnpm install"/"frontend:install": "npm install"/' wails.json
-          sed -i 's/"frontend:build": "pnpm run build"/"frontend:build": "npm run build"/' wails.json
-          cat wails.json
 
       - name: Build application
         run: wails build -platform linux/amd64
@@ -118,6 +115,11 @@ jobs:
         with:
           node-version: '18'
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
@@ -128,15 +130,6 @@ jobs:
 
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
-
-      - name: Configure Wails to use npm
-        shell: pwsh
-        run: |
-          cd ${{ env.WORKSPACE_PATH }}
-          # Update wails.json to use npm instead of pnpm
-          (Get-Content wails.json) -replace '"frontend:install": "pnpm install"', '"frontend:install": "npm install"' | Set-Content wails.json
-          (Get-Content wails.json) -replace '"frontend:build": "pnpm run build"', '"frontend:build": "npm run build"' | Set-Content wails.json
-          Get-Content wails.json
 
       - name: Build application with NSIS installer
         shell: pwsh
