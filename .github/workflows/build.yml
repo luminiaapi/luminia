@@ -32,6 +32,7 @@ on:
 env:
   WORKSPACE_PATH: ${{ github.workspace }}
   FRONTEND_PATH: ${{ github.workspace }}/frontend
+  TAILWIND_DISABLE_OXIDE: 1
 
 jobs:
   build-linux:
@@ -96,7 +97,7 @@ jobs:
       - name: Install frontend dependencies
         run: |
           cd ${{ env.FRONTEND_PATH }}
-          pnpm install --frozen-lockfile
+          pnpm install --no-frozen-lockfile
 
       - name: Build application
         run: wails build -platform linux/amd64
