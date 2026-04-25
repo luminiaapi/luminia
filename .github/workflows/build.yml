@@ -1,0 +1,194 @@
+name: Build Lumina Desktop
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Tag of the version to build
+        required: true
+      branch:
+        description: Branch to checkout
+        required: true
+        default: "main"
+      tag:
+        description: Tag to checkout (takes precedence over branch if provided)
+        required: false
+        default: ""
+      build_linux:
+        description: Build for Linux
+        type: boolean
+        required: false
+        default: true
+      build_windows:
+        description: Build for Windows
+        type: boolean
+        required: false
+        default: true
+
+env:
+  WORKSPACE_PATH: ${{ github.workspace }}
+  FRONTEND_PATH: ${{ github.workspace }}/frontend
+  TAILWIND_DISABLE_OXIDE: 1
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_linux }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch || github.ref }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            pkg-config
+          
+          # Create symlink for webkit2gtk-4.0 to webkit2gtk-4.1 for compatibility
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Install frontend dependencies
+        run: |
+          cd ${{ env.FRONTEND_PATH }}
+          pnpm install --no-frozen-lockfile
+
+      - name: Build application
+        run: wails build -platform linux/amd64
+
+      - name: Prepare artifacts
+        run: |
+          ls -lahR build/bin/
+          mkdir -p dist
+          cp build/bin/lumina dist/Lumina_linux_x64
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumina-linux
+          path: dist/*
+
+  build-windows:
+    runs-on: windows-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_windows }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch || github.ref }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: pwsh
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $env:GITHUB_ENV
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Install frontend dependencies
+        shell: pwsh
+        run: |
+          cd ${{ env.FRONTEND_PATH }}
+          pnpm install --no-frozen-lockfile
+
+      - name: Build application with NSIS installer
+        shell: pwsh
+        run: wails build -platform windows/amd64 -nsis
+
+      - name: Prepare artifacts
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse build\bin\
+          mkdir dist
+          Copy-Item build\bin\lumina.exe dist\Lumina_win_x64.exe
+          if (Test-Path build\bin\lumina-amd64-installer.exe) {
+            Copy-Item build\bin\lumina-amd64-installer.exe dist\Lumina_win_x64_installer.exe
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumina-windows
+          path: dist/*
