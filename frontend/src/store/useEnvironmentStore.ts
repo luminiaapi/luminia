@@ -18,9 +18,11 @@ interface EnvironmentState {
   setWorkspaceId: (id: string) => void;
   setEnvironments: (environments: Environment[]) => void;
   setActiveEnvironmentId: (id: string | null) => void;
-  createEnvironment: () => void;
+  createEnvironment: (scope?: 'global' | 'collection' | 'environment') => string; // Return the created ID
   updateEnvironment: (id: string, updates: Partial<Environment>) => void;
   deleteEnvironment: (id: string) => void;
+  getGlobalEnvironment: () => Environment | null;
+  createGlobalEnvironmentIfNeeded: () => Environment;
 }
 
 export const useEnvironmentStore = create<EnvironmentState>()((set, get) => ({
@@ -32,14 +34,28 @@ export const useEnvironmentStore = create<EnvironmentState>()((set, get) => ({
   setEnvironments: (environments) => set({ environments }),
   setActiveEnvironmentId: (id) => set({ activeEnvironmentId: id }),
 
-  createEnvironment: () => {
+  createEnvironment: (scope = 'environment') => {
     const id = generateId();
-    const newEnv: Environment = { id, name: 'New Environment', variables: [] };
+    const scopeNames = {
+      global: 'Global Environment',
+      collection: 'Collection Environment', 
+      environment: 'New Environment'
+    };
+    const newEnv: Environment = { 
+      id, 
+      name: scopeNames[scope], 
+      variables: [],
+      scope 
+    };
     set((state) => {
       const next = [newEnv, ...state.environments];
       scheduleSave(get().workspaceId, next);
-      return { environments: next, activeEnvironmentId: id };
+      return { 
+        environments: next, 
+        activeEnvironmentId: scope === 'environment' ? id : state.activeEnvironmentId 
+      };
     });
+    return id; // Return the created environment ID
   },
 
   updateEnvironment: (id, updates) => {
@@ -59,5 +75,33 @@ export const useEnvironmentStore = create<EnvironmentState>()((set, get) => ({
       scheduleSave(get().workspaceId, next);
       return { environments: next, activeEnvironmentId: newActiveId };
     });
+  },
+
+  getGlobalEnvironment: () => {
+    const state = get();
+    return state.environments.find(e => e.scope === 'global') || null;
+  },
+
+  createGlobalEnvironmentIfNeeded: () => {
+    const state = get();
+    let globalEnv = state.environments.find(e => e.scope === 'global');
+    
+    if (!globalEnv) {
+      const id = generateId();
+      globalEnv = {
+        id,
+        name: 'Global Environment',
+        variables: [],
+        scope: 'global'
+      };
+      
+      set((prevState) => {
+        const next = [...prevState.environments, globalEnv!];
+        scheduleSave(get().workspaceId, next);
+        return { environments: next };
+      });
+    }
+    
+    return globalEnv;
   },
 }));

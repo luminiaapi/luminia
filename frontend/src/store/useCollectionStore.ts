@@ -45,6 +45,7 @@ interface CollectionState {
   setWorkspaceId: (id: string) => void;
   setCollections: (collections: Collection[]) => void;
   createCollection: (parentId?: string, name?: string) => void;
+  updateCollection: (id: string, updates: Partial<Collection>) => void;
   toggleCollection: (id: string) => void;
   addRequestToCollection: (id: string) => void;
   importRequestToCollection: (collectionId: string, item: RequestItem) => void;
@@ -111,6 +112,16 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
               ? { ...c, collapsed: false, children: [newCol, ...(c.children || [])] }
               : c
           );
+      scheduleSave(get().workspaceId, next);
+      return { collections: next };
+    });
+  },
+
+  updateCollection: (id, updates) => {
+    set((state) => {
+      const next = recurse(state.collections, c =>
+        c.id === id ? { ...c, ...updates } : c
+      );
       scheduleSave(get().workspaceId, next);
       return { collections: next };
     });

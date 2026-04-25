@@ -1,5 +1,5 @@
-import { RequestTab, Environment, Cookie } from '../types';
-import { resolveVariables, resolveKeyValuePairs } from '../lib/variableResolver';
+import { RequestTab, Environment, Cookie, Collection } from '../types';
+import { resolveVariables, resolveKeyValuePairs, getMergedVariables } from '../lib/variableResolver';
 import { waitForWails, isWailsAvailable, sendRequest, addHistory } from '../lib/wails';
 import { ScriptEngine } from '../lib/scriptEngine';
 
@@ -26,16 +26,17 @@ export async function executeRequest(
   allCookies: Cookie[] = [],
   proxySettings: { enabled: boolean; http: string; https: string; socks: string },
   onEnvironmentUpdate: (id: string, updates: Partial<Environment>) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  currentCollection: Collection | null = null
 ): Promise<ExecutionResult> {
-  const activeEnv = environments.find(e => e.id === selectedEnvironmentId);
-  const envVars = activeEnv?.variables || [];
+  // Get merged variables with proper priority resolution
+  const mergedVariables = getMergedVariables(environments, selectedEnvironmentId, currentCollection);
 
-  // Create script engine
-  const scriptEngine = new ScriptEngine(environments, selectedEnvironmentId, onEnvironmentUpdate);
+  // Create script engine with collection context
+  const scriptEngine = new ScriptEngine(environments, selectedEnvironmentId, onEnvironmentUpdate, currentCollection);
 
   // Execute pre-request script
-  let resolvedHeaders = resolveKeyValuePairs(tab.headers, envVars);
+  let resolvedHeaders = resolveKeyValuePairs(tab.headers, mergedVariables);
   if (tab.preRequestScript) {
     const preScriptResult = await scriptEngine.executePreRequestScript(tab.preRequestScript, resolvedHeaders);
     if (!preScriptResult.success) {
@@ -56,8 +57,8 @@ export async function executeRequest(
     }
   }
 
-  // Resolve environment variables
-  let resolvedUrl = resolveVariables(tab.url, envVars);
+  // Resolve environment variables with scope priority
+  let resolvedUrl = resolveVariables(tab.url, mergedVariables);
 
   // Replace path variables (:id, :userId, etc.)
   if (tab.pathVariables) {
@@ -66,10 +67,10 @@ export async function executeRequest(
     });
   }
 
-  const resolvedParams      = resolveKeyValuePairs(tab.params, envVars);
-  const resolvedBody        = resolveVariables(tab.body, envVars);
-  const resolvedFormData    = resolveKeyValuePairs(tab.bodyFormData, envVars);
-  const resolvedUrlEncoded  = resolveKeyValuePairs(tab.bodyUrlEncoded, envVars);
+  const resolvedParams      = resolveKeyValuePairs(tab.params, mergedVariables);
+  const resolvedBody        = resolveVariables(tab.body, mergedVariables);
+  const resolvedFormData    = resolveKeyValuePairs(tab.bodyFormData, mergedVariables);
+  const resolvedUrlEncoded  = resolveKeyValuePairs(tab.bodyUrlEncoded, mergedVariables);
 
   await waitForWails();
 

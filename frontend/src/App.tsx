@@ -16,6 +16,7 @@ import { SettingsEditor } from './components/SettingsEditor';
 import { CookieModal } from './components/CookieModal';
 import { WorkspaceModal } from './components/WorkspaceModal';
 import { ImportModal } from './components/ImportModal';
+import { CollectionEnvironmentModal } from './components/CollectionEnvironmentModal';
 
 import { useTabStore } from './store/useTabStore';
 import { useCollectionStore } from './store/useCollectionStore';
@@ -54,7 +55,7 @@ export default function App() {
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
 
   const {
-    collections, createCollection, toggleCollection,
+    collections, createCollection, updateCollection, toggleCollection,
     addRequestToCollection, editItem, deleteItem: deleteCollectionItem, moveRequestToCollection,
   } = useCollectionStore();
 
@@ -82,6 +83,10 @@ export default function App() {
   const { cookies, addCookie, updateCookie, removeCookie } = useCookieStore();
   const { theme, accentColor } = useSettingsStore();
   const responsePanel = useResponsePanel();
+
+  // Collection environment modal state
+  const [collectionEnvModalOpen, setCollectionEnvModalOpen] = useState(false);
+  const [selectedCollectionForEnv, setSelectedCollectionForEnv] = useState<Collection | null>(null);
 
   // ── Workspace data loading ───────────────────────────────────────────────────
   const loadWorkspaceData = useCallback(async (wsId: string) => {
@@ -392,6 +397,33 @@ export default function App() {
     });
   }, [activeEnv, activeEnvironmentId, updateEnvironment]);
 
+  // ── Collection Environment handlers ──────────────────────────────────────────
+  const handleUpdateCollectionVariable = useCallback((vid: string, up: Partial<KeyValuePair>) => {
+    if (!selectedCollectionForEnv) return;
+    const updatedVariables = (selectedCollectionForEnv.variables || []).map(v => 
+      v.id === vid ? { ...v, ...up } : v
+    );
+    updateCollection(selectedCollectionForEnv.id, { variables: updatedVariables });
+    setSelectedCollectionForEnv({ ...selectedCollectionForEnv, variables: updatedVariables });
+  }, [selectedCollectionForEnv, updateCollection]);
+
+  const handleAddCollectionVariable = useCallback(() => {
+    if (!selectedCollectionForEnv) return;
+    const updatedVariables = [
+      ...(selectedCollectionForEnv.variables || []),
+      { id: generateId(), key: 'new_var', value: 'value', enabled: true }
+    ];
+    updateCollection(selectedCollectionForEnv.id, { variables: updatedVariables });
+    setSelectedCollectionForEnv({ ...selectedCollectionForEnv, variables: updatedVariables });
+  }, [selectedCollectionForEnv, updateCollection]);
+
+  const handleRemoveCollectionVariable = useCallback((vid: string) => {
+    if (!selectedCollectionForEnv) return;
+    const updatedVariables = (selectedCollectionForEnv.variables || []).filter(v => v.id !== vid);
+    updateCollection(selectedCollectionForEnv.id, { variables: updatedVariables });
+    setSelectedCollectionForEnv({ ...selectedCollectionForEnv, variables: updatedVariables });
+  }, [selectedCollectionForEnv, updateCollection]);
+
   // ── Environment handler ──────────────────────────────────────────────────────
   const handleCreateEnvironment = useCallback(() => {
     createEnvironment();
@@ -494,6 +526,17 @@ export default function App() {
           onAddServer={() => setWorkspaceModalOpen(true)}
           onImport={() => setImportModalOpen(true)}
           onExportCollection={handleExport}
+          onOpenCollectionEnvironment={(collectionId) => {
+            const collection = findCollectionById(collections, collectionId);
+            if (collection) {
+              // Initialize variables array if it doesn't exist
+              if (!collection.variables) {
+                updateCollection(collectionId, { variables: [] });
+              }
+              setSelectedCollectionForEnv(collection);
+              setCollectionEnvModalOpen(true);
+            }
+          }}
           width={sidebarWidth}
           isCollapsed={isSidebarCollapsed}
           isResizing={isResizing}
@@ -507,6 +550,7 @@ export default function App() {
         <Workspace
           tabs={tabs} activeTabId={activeTabId} activeWorkTab={activeWorkTab}
           environments={environments} selectedEnvironmentId={activeEnvironmentId}
+          collections={collections}
           onSetActiveTab={(id) => { setActiveWorkspaceMode('request'); setActiveTabId(id); }}
           onCloseTab={(_, id) => closeTab(id)}
           onNewTab={addNewTab}
@@ -565,6 +609,21 @@ export default function App() {
       <WorkspaceModal isOpen={modals.workspace.isOpen} onClose={() => setWorkspaceModalOpen(false)} onAdd={addServer} />
 
       <ImportModal isOpen={modals.import.isOpen} onClose={() => setImportModalOpen(false)} onImportCollection={handleImportCollection} />
+
+      <CollectionEnvironmentModal
+        isOpen={collectionEnvModalOpen}
+        collection={selectedCollectionForEnv}
+        environments={environments}
+        selectedEnvironmentId={activeEnvironmentId}
+        onClose={() => {
+          setCollectionEnvModalOpen(false);
+          setSelectedCollectionForEnv(null);
+        }}
+        onUpdateVariables={(collectionId, variables) => updateCollection(collectionId, { variables })}
+        onUpdateVariable={handleUpdateCollectionVariable}
+        onAddVariable={handleAddCollectionVariable}
+        onRemoveVariable={handleRemoveCollectionVariable}
+      />
     </div>
   );
 }

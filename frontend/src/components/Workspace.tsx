@@ -4,8 +4,8 @@
  */
 
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Plus, Copy, Database, Trash2, Shield, Terminal, Cpu, Globe, ChevronDown, Cookie as CookieIcon, LayoutPanelTop, PanelsRightBottom, GripVertical, GripHorizontal } from 'lucide-react';
-import { RequestTab, HttpMethod, KeyValuePair, Environment } from '../types';
+import { X, Plus, Copy, Globe, ChevronDown, Cookie as CookieIcon, LayoutPanelTop, PanelsRightBottom, GripVertical, GripHorizontal, Terminal, Shield, Cpu } from 'lucide-react';
+import { RequestTab, KeyValuePair, Environment, Collection } from '../types';
 import { getMethodColor } from '../constants';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { MethodSelector } from './MethodSelector';
@@ -29,6 +29,7 @@ interface WorkspaceProps {
   activeWorkTab: 'params' | 'auth' | 'headers' | 'body' | 'scripts' | 'settings' | 'code';
   environments: Environment[];
   selectedEnvironmentId: string | null;
+  collections: Collection[];
   onSetActiveTab: (id: string) => void;
   onCloseTab: (e: any, id: string) => void;
   onNewTab: () => void;
@@ -50,6 +51,7 @@ export function Workspace({
   activeWorkTab,
   environments,
   selectedEnvironmentId,
+  collections,
   onSetActiveTab,
   onCloseTab,
   onNewTab,
@@ -70,6 +72,24 @@ export function Workspace({
   const [showHiddenHeaders, setShowHiddenHeaders] = useState(false);
   const envSelectorRef = useRef<HTMLDivElement>(null);
   const { cookies } = useCookieStore();
+
+  // Find the collection that contains the active tab's request
+  const currentCollection = useMemo(() => {
+    if (!activeTab?.collectionId) return null;
+    
+    const findCollection = (cols: Collection[]): Collection | null => {
+      for (const col of cols) {
+        if (col.id === activeTab.collectionId) return col;
+        if (col.children) {
+          const found = findCollection(col.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    
+    return findCollection(collections);
+  }, [activeTab?.collectionId, collections]);
 
   const hiddenHeaders = useMemo(() => {
     const extra: KeyValuePair[] = [];
@@ -323,6 +343,7 @@ export function Workspace({
                   onChange={(url) => onUpdateActiveTab({ url })}
                   environments={environments}
                   selectedEnvironmentId={selectedEnvironmentId}
+                  currentCollection={currentCollection}
                   placeholder="https://api.vortex.io/v1/..."
                   className="bg-transparent"
                 />
@@ -374,6 +395,7 @@ export function Workspace({
                         onAdd={() => onAddKeyValuePair('pathVariables')}
                         environments={environments}
                         selectedEnvironmentId={selectedEnvironmentId}
+                        currentCollection={currentCollection}
                         isPathParams={true}
                       />
                     )}
@@ -386,6 +408,7 @@ export function Workspace({
                       onAdd={() => onAddKeyValuePair('params')}
                       environments={environments}
                       selectedEnvironmentId={selectedEnvironmentId}
+                      currentCollection={currentCollection}
                     />
                   </div>
                 )}
@@ -402,6 +425,7 @@ export function Workspace({
                     onAdd={() => onAddKeyValuePair('headers')}
                     environments={environments}
                     selectedEnvironmentId={selectedEnvironmentId}
+                    currentCollection={currentCollection}
                   />
                 )}
 
@@ -411,6 +435,7 @@ export function Workspace({
                     onUpdate={(auth) => onUpdateActiveTab({ auth })}
                     environments={environments}
                     selectedEnvironmentId={selectedEnvironmentId}
+                    currentCollection={currentCollection}
                   />
                 )}
 
@@ -426,6 +451,7 @@ export function Workspace({
                     onAddKeyValuePair={onAddKeyValuePair}
                     environments={environments}
                     selectedEnvironmentId={selectedEnvironmentId}
+                    currentCollection={currentCollection}
                   />
                 )}
 

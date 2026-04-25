@@ -80,6 +80,7 @@ export interface Collection {
   items: RequestItem[];
   collapsed?: boolean; // UI state only, not persisted
   children?: Collection[];
+  variables?: KeyValuePair[]; // Collection-scoped environment variables
 }
 
 export interface EditModalTarget {
@@ -93,6 +94,7 @@ export interface Environment {
   id: string;
   name: string;
   variables: KeyValuePair[];
+  scope?: 'global' | 'collection' | 'environment'; // Add scope property
 }
 
 export interface Cookie {

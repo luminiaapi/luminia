@@ -58,7 +58,7 @@ export function MethodSelector({ method, onChange }: MethodSelectorProps) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.98 }}
             transition={{ type: "spring", duration: 0.5, bounce: 0.1 }}
-            className="absolute top-full left-0 mt-3 w-64 bg-bg-card border border-white/10 rounded-2xl shadow-[0_30px_70px_rgba(0,0,0,0.7)] py-3 z-[100] backdrop-blur-2xl ring-1 ring-white/5"
+            className="absolute top-full left-0 mt-3 w-64 bg-[#1a1a1a] border border-white/20 rounded-2xl shadow-[0_30px_70px_rgba(0,0,0,0.9)] py-3 z-[100] backdrop-blur-2xl ring-1 ring-white/10"
           >
             <div className="px-4 pb-2 mb-2 border-b border-white/5 flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-widest opacity-30">Change Method</span>

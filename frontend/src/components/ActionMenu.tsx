@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MoreVertical, Edit2, Trash2, Download } from 'lucide-react';
+import { MoreVertical, Edit2, Trash2, Download, Globe } from 'lucide-react';
 
 interface ActionMenuProps {
   onEdit: () => void;
   onDelete: () => void;
   onExport?: () => void;
+  onEnvironment?: () => void; // For collection-scoped environment
 }
 
-export function ActionMenu({ onEdit, onDelete, onExport }: ActionMenuProps) {
+export function ActionMenu({ onEdit, onDelete, onExport, onEnvironment }: ActionMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -59,6 +60,18 @@ export function ActionMenu({ onEdit, onDelete, onExport }: ActionMenuProps) {
               </div>
               <span className="font-bold">Edit</span>
             </button>
+
+            {onEnvironment && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleAction(onEnvironment); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs text-text-dim hover:text-white hover:bg-white/5 transition-all group/item"
+              >
+                <div className="w-6 h-6 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 group-hover/item:bg-blue-500 group-hover/item:text-white transition-all">
+                  <Globe className="w-3.5 h-3.5" />
+                </div>
+                <span className="font-bold">Environment</span>
+              </button>
+            )}
 
             {onExport && (
               <button 

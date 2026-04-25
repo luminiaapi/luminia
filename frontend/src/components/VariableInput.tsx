@@ -5,7 +5,8 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Environment } from '../types';
+import { Environment, Collection } from '../types';
+import { getMergedVariables } from '../lib/variableResolver';
 
 interface VariableInputProps {
   value: string;
@@ -16,6 +17,7 @@ interface VariableInputProps {
   language?: 'json' | 'none';
   environments: Environment[];
   selectedEnvironmentId: string | null;
+  currentCollection?: Collection | null; // Add collection context
   readOnly?: boolean;
 }
 
@@ -28,18 +30,38 @@ export function VariableInput({
   language = 'none',
   environments,
   selectedEnvironmentId,
+  currentCollection = null,
   readOnly = false
 }: VariableInputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [cursorPos, setCursorPos] = useState(0);
-  const [hoveredVar, setHoveredVar] = useState<{ name: string; value: string; x: number; y: number } | null>(null);
+  const [hoveredVar, setHoveredVar] = useState<{ name: string; value: string; source: string; x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
 
-  const activeEnv = environments.find(e => e.id === selectedEnvironmentId);
-  const availableVars = useMemo(() => activeEnv?.variables.filter(v => v.enabled && v.key) || [], [activeEnv]);
+  // Get merged variables with proper priority
+  const availableVars = useMemo(() => 
+    getMergedVariables(environments, selectedEnvironmentId, currentCollection),
+    [environments, selectedEnvironmentId, currentCollection]
+  );
+
+  // Get variable source for tooltip
+  const getVariableSource = (key: string): string => {
+    const selectedEnv = environments.find(e => e.id === selectedEnvironmentId);
+    if (selectedEnv?.variables.find(v => v.key === key && v.enabled)) {
+      return selectedEnv.name;
+    }
+    if (currentCollection?.variables?.find(v => v.key === key && v.enabled)) {
+      return `${currentCollection.name} (Collection)`;
+    }
+    const globalEnv = environments.find(e => e.scope === 'global');
+    if (globalEnv?.variables.find(v => v.key === key && v.enabled)) {
+      return 'Global';
+    }
+    return 'Unknown';
+  };
 
   // Handle mouse move to detect if hovering over a variable tag in the mirror layer
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -49,7 +71,7 @@ export function VariableInput({
     const y = e.clientY;
 
     const tags = mirrorRef.current.querySelectorAll('.env-var-tag');
-    let foundTag: { name: string; value: string; x: number; y: number } | null = null;
+    let foundTag: { name: string; value: string; source: string; x: number; y: number } | null = null;
 
     for (const tag of Array.from(tags)) {
       const tagRect = tag.getBoundingClientRect();
@@ -65,6 +87,7 @@ export function VariableInput({
           foundTag = {
             name: varName,
             value: varData.value,
+            source: getVariableSource(varName),
             x: tagRect.left + tagRect.width / 2,
             y: tagRect.top - 8
           };
@@ -94,15 +117,15 @@ export function VariableInput({
       ? /(\{\{.*?\}\})|("(?:\\.|[^"\\])*"(?=\s*:))|("(?:\\.|[^"\\])*")|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|(\b(?:true|false|null)\b)/g
       : /(\{\{.*?\}\})/g;
 
-    let match;
+    let match: RegExpExecArray | null;
     let lastIndex = 0;
 
     while ((match = regex.exec(text)) !== null) {
       if (match.index > lastIndex) {
-        parts.push(text.substring(lastIndex, match.index));
+        parts.push(<span key={`text-${lastIndex}`} className="text-white">{text.substring(lastIndex, match.index)}</span>);
       }
 
-      const [full, envVar, jsonKey, jsonString, jsonNumber, jsonKeyword] = match;
+      const [, envVar, jsonKey, jsonString, jsonNumber, jsonKeyword] = match;
 
       if (envVar) {
         const varName = envVar.replace(/\{\{\s*|\s*\}\}/g, '');
@@ -130,7 +153,7 @@ export function VariableInput({
     }
 
     if (lastIndex < text.length) {
-      parts.push(text.substring(lastIndex));
+      parts.push(<span key={`text-${lastIndex}`} className="text-white">{text.substring(lastIndex)}</span>);
     }
 
     return parts;
@@ -293,10 +316,10 @@ export function VariableInput({
     setShowSuggestions(false);
   };
 
-  const handleScroll = (e: any) => {
+  const handleScroll = (e: React.UIEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     if (mirrorRef.current) {
-      mirrorRef.current.scrollTop = e.target.scrollTop;
-      mirrorRef.current.scrollLeft = e.target.scrollLeft;
+      mirrorRef.current.scrollTop = e.currentTarget.scrollTop;
+      mirrorRef.current.scrollLeft = e.currentTarget.scrollLeft;
     }
   };
 
@@ -304,6 +327,17 @@ export function VariableInput({
 
   return (
     <div className={`relative flex flex-col ${className}`}>
+      {/* Background highlighting layer */}
+      <div 
+        ref={mirrorRef}
+        aria-hidden="true"
+        className={`absolute inset-0 pointer-events-none whitespace-pre-wrap break-words px-4 py-2.5 font-mono text-sm border border-transparent overflow-hidden rounded-lg ${multiline ? 'min-h-[200px]' : ''}`}
+        style={{ color: 'transparent', zIndex: 1, wordWrap: 'break-word', overflowWrap: 'break-word' }}
+      >
+        {renderHighlightedText()}
+        {!value && placeholder && <span className="text-text-dim/30">{placeholder}</span>}
+      </div>
+
       {/* Real interaction layer */}
       <Tag
         ref={inputRef as any}
@@ -325,19 +359,13 @@ export function VariableInput({
         readOnly={readOnly}
         className={`w-full bg-transparent border border-white/10 rounded-lg px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-brand-accent/50 transition-[border-color,background-color] placeholder:text-text-dim/50 caret-white relative z-10 ${multiline ? 'resize-y min-h-[200px]' : ''} ${readOnly ? 'cursor-default' : ''}`}
         placeholder={placeholder}
-        style={{ color: '#ffffff' }}
+        style={{ 
+          color: 'transparent', 
+          caretColor: 'white', 
+          WebkitTextFillColor: 'transparent',
+          textShadow: 'none'
+        }}
       />
-
-      {/* Background highlighting layer */}
-      <div 
-        ref={mirrorRef}
-        aria-hidden="true"
-        className={`absolute inset-0 pointer-events-none whitespace-pre-wrap break-all px-4 py-2.5 font-mono text-sm border border-transparent overflow-hidden ${multiline ? 'h-full' : ''}`}
-        style={{ color: 'transparent', zIndex: 1 }}
-      >
-        {renderHighlightedText()}
-        {!value && placeholder && <span className="text-text-dim/30">{placeholder}</span>}
-      </div>
 
       {/* Variable Value Tooltip */}
       <AnimatePresence>
@@ -353,9 +381,10 @@ export function VariableInput({
               transform: 'translate(-50%, -100%)'
             }}
           >
-            <div className="bg-bg-card border border-brand-accent/30 rounded-lg px-3 py-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex flex-col items-center gap-0.5 backdrop-blur-md">
+            <div className="bg-bg-card border border-brand-accent/30 rounded-lg px-3 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex flex-col items-center gap-1 backdrop-blur-md">
               <span className="text-[9px] font-black text-brand-accent uppercase tracking-widest">{hoveredVar.name}</span>
               <span className="text-xs font-mono text-text-main font-bold truncate max-w-[200px]">{hoveredVar.value}</span>
+              <span className="text-[8px] font-bold text-text-dim/60 uppercase tracking-wider">{hoveredVar.source}</span>
               <div className="absolute top-full left-1/2 -ml-1 border-4 border-transparent border-t-bg-card" />
             </div>
           </motion.div>
