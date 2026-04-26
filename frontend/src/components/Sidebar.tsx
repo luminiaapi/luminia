@@ -317,7 +317,7 @@ export function Sidebar({
                   <div key={srv.id}>
                     {/* ── Server header ── */}
                     <div className={`flex items-center gap-2 px-2 py-2 rounded-xl border transition-all cursor-pointer group
-                      ${activeServerId === srv.id ? 'border-brand-accent/30 bg-brand-accent/5' : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.04]'}`}
+                      ${activeServerId === srv.id ? 'border-brand-accent/20 bg-brand-accent/5' : 'border-white/[0.03] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.06]'}`}
                       onClick={() => toggleServer(srv.id)}>
                       <ChevronRight className={`w-3 h-3 text-text-dim transition-transform shrink-0 ${isServerCollapsed ? '' : 'rotate-90'}`} />
                       <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0
@@ -368,7 +368,7 @@ export function Sidebar({
                               <div key={ws.id}
                                 onClick={() => { if (!isEditing) { setActiveServerId(srv.id); setActiveWorkspaceId(ws.id); } }}
                                 className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all group border
-                                  ${isActive ? 'bg-brand-accent/10 border-brand-accent/20 text-brand-accent' : 'border-transparent hover:bg-white/5 text-text-dim'}`}>
+                                  ${isActive ? 'bg-brand-accent/10 border-brand-accent/20 text-brand-accent' : 'border-white/[0.03] hover:bg-white/5 hover:border-white/[0.06] text-text-dim'}`}>
                                 <LayoutGrid className="w-3 h-3 shrink-0" />
 
                                 {isEditing ? (
