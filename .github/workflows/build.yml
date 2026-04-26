@@ -190,10 +190,16 @@ jobs:
           Terminal=false
           EOF
           
+          # Ensure deb-compatible version (must start with a digit)
+          DEB_VERSION="${VERSION#dev-}"
+          if [[ ! "$DEB_VERSION" =~ ^[0-9] ]]; then
+            DEB_VERSION="0~${DEB_VERSION}"
+          fi
+          
           # Create control file
           cat > debian/DEBIAN/control << EOF
           Package: lumina
-          Version: ${VERSION}
+          Version: ${DEB_VERSION}
           Section: devel
           Priority: optional
           Architecture: amd64
