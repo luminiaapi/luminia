@@ -21,8 +21,8 @@ export function Checkbox({ checked, onChange, className = '', disabled }: Checkb
       className={`
         relative w-4 h-4 rounded-md border transition-all duration-300 flex items-center justify-center outline-none shrink-0
         ${checked 
-          ? (disabled ? 'bg-white/10 border-white/10' : 'bg-brand-accent border-brand-accent shadow-[0_0_10px_rgba(139,92,246,0.4)]')
-          : 'bg-white/[0.02] border-white/10 hover:border-white/20 hover:bg-white/[0.05]'}
+          ? (disabled ? 'bg-white/10 border-white/[0.06]' : 'bg-brand-accent border-brand-accent/30 shadow-[0_0_10px_rgba(139,92,246,0.4)]')
+          : 'bg-white/[0.02] border-white/[0.06] hover:border-white/[0.12] hover:bg-white/[0.05]'}
         ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}
         ${className}
       `}

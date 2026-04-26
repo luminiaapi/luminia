@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Environment, KeyValuePair } from '../types';
+import { Environment, KeyValuePair, Collection } from '../types';
+import { getMergedVariables } from './variableResolver';
 
 export interface ScriptContext {
   environment: {
@@ -36,15 +37,18 @@ export class ScriptEngine {
   private environments: Environment[];
   private activeEnvironmentId: string | null;
   private onEnvironmentUpdate: (id: string, updates: Partial<Environment>) => void;
+  private currentCollection: Collection | null;
 
   constructor(
     environments: Environment[],
     activeEnvironmentId: string | null,
-    onEnvironmentUpdate: (id: string, updates: Partial<Environment>) => void
+    onEnvironmentUpdate: (id: string, updates: Partial<Environment>) => void,
+    currentCollection: Collection | null = null
   ) {
     this.environments = environments;
     this.activeEnvironmentId = activeEnvironmentId;
     this.onEnvironmentUpdate = onEnvironmentUpdate;
+    this.currentCollection = currentCollection;
   }
 
   async executePreRequestScript(
@@ -65,8 +69,9 @@ export class ScriptEngine {
           environmentUpdates.push({ key, value: stringValue });
         },
         get: (key: string) => {
-          const activeEnv = this.environments.find(e => e.id === this.activeEnvironmentId);
-          const variable = activeEnv?.variables.find(v => v.key === key && v.enabled);
+          // Use merged variables with proper scope priority
+          const mergedVariables = getMergedVariables(this.environments, this.activeEnvironmentId, this.currentCollection);
+          const variable = mergedVariables.find(v => v.key === key && v.enabled);
           return variable?.value;
         }
       },
@@ -97,7 +102,7 @@ export class ScriptEngine {
       const func = new Function('pm', script);
       await func(pm);
 
-      // Apply environment updates
+      // Apply environment updates to the selected environment (highest priority)
       if (environmentUpdates.length > 0 && this.activeEnvironmentId) {
         const activeEnv = this.environments.find(e => e.id === this.activeEnvironmentId);
         if (activeEnv) {
@@ -145,8 +150,9 @@ export class ScriptEngine {
           environmentUpdates.push({ key, value: stringValue });
         },
         get: (key: string) => {
-          const activeEnv = this.environments.find(e => e.id === this.activeEnvironmentId);
-          const variable = activeEnv?.variables.find(v => v.key === key && v.enabled);
+          // Use merged variables with proper scope priority
+          const mergedVariables = getMergedVariables(this.environments, this.activeEnvironmentId, this.currentCollection);
+          const variable = mergedVariables.find(v => v.key === key && v.enabled);
           return variable?.value;
         }
       },
@@ -187,7 +193,7 @@ export class ScriptEngine {
       const func = new Function('pm', script);
       await func(pm);
 
-      // Apply environment updates
+      // Apply environment updates to the selected environment (highest priority)
       if (environmentUpdates.length > 0 && this.activeEnvironmentId) {
         const activeEnv = this.environments.find(e => e.id === this.activeEnvironmentId);
         if (activeEnv) {

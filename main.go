@@ -2,6 +2,8 @@ package main
 
 import (
 	"embed"
+	"io/fs"
+	"log"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -16,14 +18,21 @@ var assets embed.FS
 func main() {
 	app := NewApp()
 
-	err := wails.Run(&options.App{
+	// Create a sub-filesystem that strips the "frontend/dist" prefix
+	distFS, err := fs.Sub(assets, "frontend/dist")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = wails.Run(&options.App{
 		Title:  "Lumina",
 		Width:  1280,
 		Height: 800,
 		MinWidth: 900,
 		MinHeight: 600,
 		AssetServer: &assetserver.Options{
-			Assets: assets,
+			Assets: distFS,
+			Handler: nil,
 		},
 		BackgroundColour: &options.RGBA{R: 10, G: 10, B: 15, A: 1},
 		OnStartup:        app.startup,
@@ -37,6 +46,10 @@ func main() {
 		},
 		Linux: &linux.Options{
 			ProgramName: "Lumina",
+			WebviewGpuPolicy: linux.WebviewGpuPolicyAlways,
+		},
+		Debug: options.Debug{
+			OpenInspectorOnStartup: false,
 		},
 	})
 

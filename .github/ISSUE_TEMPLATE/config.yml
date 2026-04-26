@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Community Discussions
+    url: https://github.com/luminiaapi/lumina/discussions
+    about: Ask questions, share ideas, and discuss with the community
+  - name: 📖 Documentation
+    url: https://github.com/luminiaapi/lumina/wiki
+    about: Read the documentation, guides, and API reference
+  - name: 💡 Ideas & Feedback
+    url: https://github.com/luminiaapi/lumina/discussions/categories/ideas
+    about: Share your ideas and feedback with the community
+  - name: 🆘 Support
+    url: https://github.com/luminiaapi/lumina/discussions/categories/q-a
+    about: Get help from the community in Q&A discussions

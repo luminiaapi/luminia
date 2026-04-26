@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { Trash2, Plus, FileUp, File, Type } from 'lucide-react';
-import { KeyValuePair, Environment } from '../types';
+import { KeyValuePair, Environment, Collection } from '../types';
 import { Checkbox } from './Checkbox';
 import { VariableInput } from './VariableInput';
 
@@ -21,6 +21,7 @@ interface KeyValueEditorProps {
   showTypeSelector?: boolean;
   environments: Environment[];
   selectedEnvironmentId: string | null;
+  currentCollection?: Collection | null;
   isPathParams?: boolean;
 }
 
@@ -36,6 +37,7 @@ export function KeyValueEditor({
   showTypeSelector,
   environments,
   selectedEnvironmentId,
+  currentCollection,
   isPathParams
 }: KeyValueEditorProps) {
   const handleFileChange = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,6 +95,7 @@ export function KeyValueEditor({
                   onChange={() => {}}
                   environments={environments}
                   selectedEnvironmentId={selectedEnvironmentId}
+                  currentCollection={currentCollection}
                   placeholder="Key"
                   className="w-full"
                   readOnly
@@ -105,6 +108,7 @@ export function KeyValueEditor({
                   onChange={() => {}}
                   environments={environments}
                   selectedEnvironmentId={selectedEnvironmentId}
+                  currentCollection={currentCollection}
                   placeholder="Value"
                   className="w-full"
                   readOnly
@@ -157,6 +161,7 @@ export function KeyValueEditor({
                   onChange={(key) => !isPathParams && onUpdate(item.id, { key })}
                   environments={environments}
                   selectedEnvironmentId={selectedEnvironmentId}
+                  currentCollection={currentCollection}
                   placeholder="Key"
                   className={`w-full ${isPathParams ? 'opacity-50' : ''}`}
                   readOnly={isPathParams}
@@ -190,6 +195,7 @@ export function KeyValueEditor({
                     onChange={(value) => onUpdate(item.id, { value })}
                     environments={environments}
                     selectedEnvironmentId={selectedEnvironmentId}
+                    currentCollection={currentCollection}
                     placeholder="Value"
                     className="w-full"
                   />

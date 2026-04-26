@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { KeyValuePair, RequestTab, Environment } from '../types';
+import { KeyValuePair, RequestTab, Environment, Collection } from '../types';
 import { KeyValueEditor } from './KeyValueEditor';
 import { FileJson, List, Hash, Ban } from 'lucide-react';
 import { SegmentedControl } from './SegmentedControl';
@@ -20,6 +20,7 @@ interface BodyEditorProps {
   onAddKeyValuePair: (field: 'bodyFormData' | 'bodyUrlEncoded') => void;
   environments: Environment[];
   selectedEnvironmentId: string | null;
+  currentCollection?: Collection | null;
 }
 
 export function BodyEditor({ 
@@ -32,7 +33,8 @@ export function BodyEditor({
   onRemoveKeyValuePair,
   onAddKeyValuePair,
   environments,
-  selectedEnvironmentId
+  selectedEnvironmentId,
+  currentCollection
 }: BodyEditorProps) {
   const bodyTypes = [
     { id: 'none', label: 'None', icon: <Ban className="w-3.5 h-3.5" /> },
@@ -60,7 +62,7 @@ export function BodyEditor({
         )}
 
         {bodyType === 'json' && (
-          <div className="flex flex-col min-h-[300px] bg-bg-deep rounded-2xl border border-white/5">
+          <div className="flex flex-col min-h-[300px] bg-bg-deep rounded-2xl border border-white/5 overflow-hidden">
             <div className="p-3 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">
               <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">JSON RAW Editor</span>
               <div className="flex gap-2">
@@ -78,16 +80,19 @@ export function BodyEditor({
                 </button>
               </div>
             </div>
-            <VariableInput
-              multiline
-              language="json"
-              value={body}
-              onChange={(val) => onUpdate({ body: val })}
-              environments={environments}
-              selectedEnvironmentId={selectedEnvironmentId}
-              placeholder='{ "key": "value" }'
-              className="flex-1"
-            />
+            <div className="flex-1 p-3 bg-[#0a0a0a]">
+              <VariableInput
+                multiline
+                language="json"
+                value={body}
+                onChange={(val) => onUpdate({ body: val })}
+                environments={environments}
+                selectedEnvironmentId={selectedEnvironmentId}
+                currentCollection={currentCollection}
+                placeholder='{ "key": "value" }'
+                className="flex-1 h-full"
+              />
+            </div>
           </div>
         )}
 
@@ -101,6 +106,7 @@ export function BodyEditor({
             showTypeSelector
             environments={environments}
             selectedEnvironmentId={selectedEnvironmentId}
+            currentCollection={currentCollection}
           />
         )}
 
@@ -113,6 +119,7 @@ export function BodyEditor({
             onAdd={() => onAddKeyValuePair('bodyUrlEncoded')}
             environments={environments}
             selectedEnvironmentId={selectedEnvironmentId}
+            currentCollection={currentCollection}
           />
         )}
       </div>

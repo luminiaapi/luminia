@@ -28,10 +28,13 @@ export function mapCollections(
   collections: Collection[],
   fn: (c: Collection) => Collection
 ): Collection[] {
-  return collections.map(c => ({
-    ...fn(c),
-    children: c.children ? mapCollections(c.children, fn) : []
-  }));
+  return collections.map(c => {
+    const transformed = fn(c);
+    return {
+      ...transformed,
+      children: transformed.children ? mapCollections(transformed.children, fn) : []
+    };
+  });
 }
 
 /**

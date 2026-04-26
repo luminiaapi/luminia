@@ -3,8 +3,12 @@ name: Build Lumina Desktop
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main ]
+  release:
+    types: [created]
   workflow_dispatch:
     inputs:
       version:
@@ -32,6 +36,7 @@ on:
 env:
   WORKSPACE_PATH: ${{ github.workspace }}
   FRONTEND_PATH: ${{ github.workspace }}/frontend
+  TAILWIND_DISABLE_OXIDE: 1
 
 jobs:
   build-linux:
@@ -44,6 +49,34 @@ jobs:
         with:
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch || github.ref }}
 
+      - name: Extract version info
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            RELEASE_NAME="${{ github.event.release.name }}"
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+            RELEASE_NAME="Lumina-${{ inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            RELEASE_NAME="Lumina-${VERSION}"
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+            RELEASE_NAME="Lumina-dev"
+          fi
+          
+          # Clean version (remove 'v' prefix if present)
+          CLEAN_VERSION="${VERSION#v}"
+          
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "clean_version=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
+          echo "release_name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
+          
+          echo "Version: ${VERSION}"
+          echo "Clean Version: ${CLEAN_VERSION}"
+          echo "Release Name: ${RELEASE_NAME}"
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -52,12 +85,25 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install Linux dependencies
         run: |
@@ -65,9 +111,17 @@ jobs:
           sudo apt-get install -y \
             build-essential \
             libgtk-3-dev \
-            libwebkit2gtk-4.0-dev \
+            libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            pkg-config \
+            libfuse2 \
+            desktop-file-utils \
+            dpkg-dev \
+            fakeroot
+          
+          # Create symlink for webkit2gtk-4.0 to webkit2gtk-4.1 for compatibility
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -81,22 +135,173 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
       - name: Install frontend dependencies
-        run: pnpm install --dir ${{ env.FRONTEND_PATH }}
+        run: |
+          cd ${{ env.FRONTEND_PATH }}
+          pnpm install --no-frozen-lockfile
 
-      - name: Build application
-        run: wails build -platform linux/amd64
+      - name: Verify icon files
+        run: |
+          echo "Checking icon files..."
+          if [ -f "build/appicon.png" ]; then
+            echo "✓ Icon file exists: build/appicon.png"
+            ls -lh build/appicon.png
+          else
+            echo "✗ Missing: build/appicon.png"
+            exit 1
+          fi
+
+      - name: Build application with custom icons
+        run: |
+          echo "Building Lumina with custom icons..."
+          wails build -platform linux/amd64 -clean
+          if [ $? -ne 0 ]; then
+            echo "Build failed!"
+            exit 1
+          fi
+          echo "Build completed successfully!"
+
+      - name: Create .deb package
+        run: |
+          VERSION="${{ steps.version.outputs.clean_version }}"
+          RELEASE_NAME="${{ steps.version.outputs.release_name }}"
+          
+          # Create debian package structure
+          mkdir -p debian/DEBIAN
+          mkdir -p debian/usr/bin
+          mkdir -p debian/usr/share/applications
+          mkdir -p debian/usr/share/icons/hicolor/256x256/apps
+          
+          # Copy binary
+          cp build/bin/lumina debian/usr/bin/lumina
+          chmod +x debian/usr/bin/lumina
+          
+          # Copy icon
+          cp build/appicon.png debian/usr/share/icons/hicolor/256x256/apps/lumina.png
+          
+          # Create desktop file
+          cat > debian/usr/share/applications/lumina.desktop << EOF
+          [Desktop Entry]
+          Name=Lumina
+          Comment=Modern API Client
+          Exec=/usr/bin/lumina
+          Icon=lumina
+          Type=Application
+          Categories=Development;Network;
+          Terminal=false
+          EOF
+          
+          # Ensure deb-compatible version (must start with a digit)
+          DEB_VERSION="${VERSION#dev-}"
+          if [[ ! "$DEB_VERSION" =~ ^[0-9] ]]; then
+            DEB_VERSION="0~${DEB_VERSION}"
+          fi
+          
+          # Create control file
+          cat > debian/DEBIAN/control << EOF
+          Package: lumina
+          Version: ${DEB_VERSION}
+          Section: devel
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Lumina <lumina@example.com>
+          Description: Modern API Client
+           A beautiful, fast, and native API testing tool built with Go and React
+          EOF
+          
+          # Build .deb package
+          dpkg-deb --build debian "${RELEASE_NAME}_amd64.deb"
+          
+          echo "✓ .deb package created: ${RELEASE_NAME}_amd64.deb"
+
+      - name: Create AppImage
+        run: |
+          VERSION="${{ steps.version.outputs.clean_version }}"
+          RELEASE_NAME="${{ steps.version.outputs.release_name }}"
+          
+          # Download appimagetool
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          
+          # Create AppDir structure
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          # Copy binary
+          cp build/bin/lumina AppDir/usr/bin/lumina
+          chmod +x AppDir/usr/bin/lumina
+          
+          # Copy icon
+          cp build/appicon.png AppDir/lumina.png
+          cp build/appicon.png AppDir/usr/share/icons/hicolor/256x256/apps/lumina.png
+          
+          # Create desktop file
+          cat > AppDir/lumina.desktop << EOF
+          [Desktop Entry]
+          Name=Lumina
+          Comment=Modern API Client
+          Exec=lumina
+          Icon=lumina
+          Type=Application
+          Categories=Development;Network;
+          Terminal=false
+          EOF
+          
+          cp AppDir/lumina.desktop AppDir/usr/share/applications/
+          
+          # Create AppRun
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin:${PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+          exec "${HERE}/usr/bin/lumina" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+          
+          # Build AppImage
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage AppDir "${RELEASE_NAME}.AppImage"
+          chmod +x "${RELEASE_NAME}.AppImage"
+          
+          echo "✓ AppImage created: ${RELEASE_NAME}.AppImage"
 
       - name: Prepare artifacts
         run: |
+          echo "Preparing artifacts..."
           ls -lahR build/bin/
           mkdir -p dist
-          cp build/bin/lumina dist/Lumina_linux_x64
+          
+          VERSION="${{ steps.version.outputs.clean_version }}"
+          RELEASE_NAME="${{ steps.version.outputs.release_name }}"
+          
+          # Copy all build artifacts
+          cp build/bin/lumina "dist/${RELEASE_NAME}"
+          mv "${RELEASE_NAME}_amd64.deb" dist/
+          mv "${RELEASE_NAME}.AppImage" dist/
+          
+          # Show file sizes
+          echo ""
+          echo "Build artifacts:"
+          ls -lh dist/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: lumina-linux
           path: dist/*
+
+      - name: Build summary
+        run: |
+          echo "## ✅ Linux Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** Linux x64" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Release Name:** ${{ steps.version.outputs.release_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Icon:** Custom Lumina icon included" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          ls -lh dist/ | tail -n +2 | awk '{printf "- **%s**: %s\n", $9, $5}' >> $GITHUB_STEP_SUMMARY
 
   build-windows:
     runs-on: windows-latest
@@ -108,6 +313,36 @@ jobs:
         with:
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch || github.ref }}
 
+      - name: Extract version info
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "release") {
+            $VERSION = "${{ github.event.release.tag_name }}"
+            $RELEASE_NAME = "${{ github.event.release.name }}"
+          } elseif ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ inputs.version }}" -ne "") {
+            $VERSION = "${{ inputs.version }}"
+            $RELEASE_NAME = "Lumina-${{ inputs.version }}"
+          } elseif ("${{ github.ref }}" -like "refs/tags/*") {
+            $VERSION = "${{ github.ref }}".Replace("refs/tags/", "")
+            $RELEASE_NAME = "Lumina-$VERSION"
+          } else {
+            $SHORT_SHA = git rev-parse --short HEAD
+            $VERSION = "dev-$SHORT_SHA"
+            $RELEASE_NAME = "Lumina-dev"
+          }
+          
+          # Clean version (remove 'v' prefix if present)
+          $CLEAN_VERSION = $VERSION -replace '^v', ''
+          
+          echo "version=$VERSION" >> $env:GITHUB_OUTPUT
+          echo "clean_version=$CLEAN_VERSION" >> $env:GITHUB_OUTPUT
+          echo "release_name=$RELEASE_NAME" >> $env:GITHUB_OUTPUT
+          
+          Write-Host "Version: $VERSION"
+          Write-Host "Clean Version: $CLEAN_VERSION"
+          Write-Host "Release Name: $RELEASE_NAME"
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -116,12 +351,25 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
+
+      - name: Get pnpm store directory
+        shell: pwsh
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $env:GITHUB_ENV
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -136,20 +384,153 @@ jobs:
 
       - name: Install frontend dependencies
         shell: pwsh
-        run: pnpm install --dir ${{ env.FRONTEND_PATH }}
+        run: |
+          cd ${{ env.FRONTEND_PATH }}
+          pnpm install --no-frozen-lockfile
 
-      - name: Build application with NSIS installer
+      - name: Verify icon files
         shell: pwsh
-        run: wails build -platform windows/amd64 -nsis
+        run: |
+          Write-Host "Checking icon files..." -ForegroundColor Cyan
+          if (Test-Path "build/windows/icon.ico") {
+            Write-Host "✓ Icon file exists: build/windows/icon.ico" -ForegroundColor Green
+            $iconSize = (Get-Item "build/windows/icon.ico").Length
+            Write-Host "  Size: $([math]::Round($iconSize/1KB, 2)) KB" -ForegroundColor White
+          } else {
+            Write-Host "✗ Missing: build/windows/icon.ico" -ForegroundColor Red
+            exit 1
+          }
+          if (Test-Path "build/appicon.png") {
+            Write-Host "✓ Icon file exists: build/appicon.png" -ForegroundColor Green
+            $appIconSize = (Get-Item "build/appicon.png").Length
+            Write-Host "  Size: $([math]::Round($appIconSize/1KB, 2)) KB" -ForegroundColor White
+          } else {
+            Write-Host "✗ Missing: build/appicon.png" -ForegroundColor Red
+            exit 1
+          }
+
+      - name: Build application with custom icons
+        shell: pwsh
+        run: |
+          Write-Host "Building Lumina with custom icons..." -ForegroundColor Cyan
+          
+          # Update wails.json with version
+          $wailsConfig = Get-Content wails.json | ConvertFrom-Json
+          $wailsConfig.info.productVersion = "${{ steps.version.outputs.clean_version }}"
+          $wailsConfig | ConvertTo-Json -Depth 10 | Set-Content wails.json
+          
+          # Build with NSIS installer
+          wails build -platform windows/amd64 -nsis -clean
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Build failed!" -ForegroundColor Red
+            exit 1
+          }
+          Write-Host "Build completed successfully!" -ForegroundColor Green
+
+      - name: Create Windows MSI Installer
+        shell: pwsh
+        run: |
+          $VERSION = "${{ steps.version.outputs.clean_version }}"
+          $RELEASE_NAME = "${{ steps.version.outputs.release_name }}"
+          
+          # Normalize version to #.#.#.# format required by WiX
+          # Strip any non-numeric prefix (e.g. dev-abc1234 -> 0.0.0.0)
+          if ($VERSION -match '^\d') {
+            # Parse semver parts, pad to 4 parts
+            $parts = $VERSION -replace '[^0-9.]','' -split '\.' 
+            while ($parts.Count -lt 4) { $parts += '0' }
+            $MSI_VERSION = ($parts[0..3] -join '.')
+          } else {
+            $MSI_VERSION = "0.0.0.0"
+          }
+          
+          Write-Host "MSI Version: $MSI_VERSION" -ForegroundColor Cyan
+          
+          # Install WiX Toolset
+          Write-Host "Installing WiX Toolset..." -ForegroundColor Cyan
+          dotnet tool install --global wix --version 5.0.2
+          
+          # Create WiX source file (WiX v5 syntax)
+          $wxsContent = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Lumina" Version="$MSI_VERSION" Manufacturer="Lumina" UpgradeCode="12345678-1234-1234-1234-123456789012">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Lumina is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="ProductFeature" Title="Lumina" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Lumina" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Lumina" />
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="LuminaExe" Guid="*">
+        <File Id="LuminaExeFile" Source="build\bin\lumina.exe" KeyPath="yes">
+          <Shortcut Id="ApplicationStartMenuShortcut" Directory="ApplicationProgramsFolder" Name="Lumina" WorkingDirectory="INSTALLFOLDER" Icon="LuminaIcon.exe" IconIndex="0" Advertise="yes" />
+        </File>
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <Icon Id="LuminaIcon.exe" SourceFile="build\windows\icon.ico" />
+  </Fragment>
+</Wix>
+"@
+          
+          $wxsContent | Out-File -FilePath "lumina.wxs" -Encoding UTF8
+          
+          # Build MSI
+          Write-Host "Building MSI installer..." -ForegroundColor Cyan
+          wix build lumina.wxs -out "${RELEASE_NAME}.msi"
+          
+          if (Test-Path "${RELEASE_NAME}.msi") {
+            Write-Host "✓ MSI installer created: ${RELEASE_NAME}.msi" -ForegroundColor Green
+          } else {
+            Write-Host "⚠ MSI creation failed, continuing with NSIS installer only" -ForegroundColor Yellow
+          }
 
       - name: Prepare artifacts
         shell: pwsh
         run: |
+          Write-Host "Preparing artifacts..." -ForegroundColor Cyan
           Get-ChildItem -Recurse build\bin\
           mkdir dist
-          Copy-Item build\bin\lumina.exe dist\Lumina_win_x64.exe
+          
+          $VERSION = "${{ steps.version.outputs.clean_version }}"
+          $RELEASE_NAME = "${{ steps.version.outputs.release_name }}"
+          
+          # Copy portable executable
+          Copy-Item build\bin\lumina.exe "dist\${RELEASE_NAME}_portable.exe"
+          Write-Host "✓ Portable executable created" -ForegroundColor Green
+          
+          # Copy NSIS installer if exists
           if (Test-Path build\bin\lumina-amd64-installer.exe) {
-            Copy-Item build\bin\lumina-amd64-installer.exe dist\Lumina_win_x64_installer.exe
+            Copy-Item build\bin\lumina-amd64-installer.exe "dist\${RELEASE_NAME}_installer.exe"
+            Write-Host "✓ NSIS installer created" -ForegroundColor Green
+          }
+          
+          # Copy MSI installer if exists
+          if (Test-Path "${RELEASE_NAME}.msi") {
+            Copy-Item "${RELEASE_NAME}.msi" dist\
+            Write-Host "✓ MSI installer copied" -ForegroundColor Green
+          }
+          
+          # Show file sizes
+          Write-Host "`nBuild artifacts:" -ForegroundColor Cyan
+          Get-ChildItem dist\ | ForEach-Object {
+            $size = [math]::Round($_.Length/1MB, 2)
+            Write-Host "  $($_.Name): $size MB" -ForegroundColor White
           }
 
       - name: Upload artifacts
@@ -157,3 +538,54 @@ jobs:
         with:
           name: lumina-windows
           path: dist/*
+
+      - name: Build summary
+        shell: pwsh
+        run: |
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## ✅ Windows Build Complete"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "**Platform:** Windows x64"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "**Version:** ${{ steps.version.outputs.version }}"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "**Release Name:** ${{ steps.version.outputs.release_name }}"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "**Icon:** Custom Lumina icon (icon.ico)"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "**Installers:** NSIS and MSI installers included"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### Artifacts"
+          Get-ChildItem dist\ | ForEach-Object {
+            $size = [math]::Round($_.Length/1MB, 2)
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **$($_.Name)**: $size MB"
+          }
+
+  release:
+    name: Create Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lumina-linux
+          path: artifacts/linux
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lumina-windows
+          path: artifacts/windows
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            artifacts/linux/*
+            artifacts/windows/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

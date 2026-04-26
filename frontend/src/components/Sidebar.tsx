@@ -49,6 +49,7 @@ interface SidebarProps {
   onAddServer: () => void;
   onImport: () => void;
   onExportCollection: (id: string) => void;
+  onOpenCollectionEnvironment: (collectionId: string) => void; // New callback
   width: number;
   isCollapsed: boolean;
   isResizing: boolean;
@@ -73,6 +74,7 @@ export function Sidebar({
   onAddServer,
   onImport,
   onExportCollection,
+  onOpenCollectionEnvironment,
   width,
   isCollapsed,
   isResizing,
@@ -206,6 +208,7 @@ export function Sidebar({
                     onEdit={onEdit}
                     onDelete={onDelete}
                     onExportCollection={onExportCollection}
+                    onOpenCollectionEnvironment={onOpenCollectionEnvironment}
                   />
                 ))}
                 {collections.length === 0 && (
@@ -219,43 +222,90 @@ export function Sidebar({
           )}
 
           {activeTab === 'env' && (
-            <div className="space-y-1">
-              {environments.map((env) => (
-                <motion.div
-                  layout
-                  key={env.id}
-                  onClick={() => onOpenEnvironment(env.id)}
-                  className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all group border ${
-                    activeEnvironmentId === env.id 
-                      ? 'bg-brand-accent/10 border-brand-accent/20' 
-                      : 'hover:bg-white/5 border-transparent'
-                  }`}
-                >
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                    activeEnvironmentId === env.id ? 'bg-brand-accent text-white' : 'bg-white/5 text-text-dim group-hover:bg-white/10'
-                  }`}>
-                    <Globe className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-text-main truncate group-hover:text-white transition-colors">{env.name}</div>
-                    <div className="text-[10px] text-text-dim truncate opacity-60">
-                      {env.variables.length} Variables
-                    </div>
-                  </div>
-                  <div className="opacity-0 group-hover:opacity-100 transition-all">
-                    <ActionMenu 
-                      onEdit={() => onEdit('environment', env.id, env.name)} 
-                      onDelete={() => onDelete('environment', env.id)} 
-                    />
-                  </div>
-                </motion.div>
-              ))}
-              {environments.length === 0 && (
-                <div className="p-8 text-center border-2 border-dashed border-white/5 rounded-2xl">
-                  <Globe className="w-8 h-8 text-text-dim mx-auto mb-3 opacity-20" />
-                  <p className="text-xs text-text-dim">No environments found</p>
+            <div className="space-y-4">
+              {/* Global Environment Section */}
+              <div>
+                <div className="px-2 mb-2">
+                  <h3 className="text-[9px] font-black uppercase tracking-widest text-text-dim/40">Global</h3>
                 </div>
-              )}
+                {environments.filter(env => env.scope === 'global').map((env) => (
+                  <motion.div
+                    layout
+                    key={env.id}
+                    onClick={() => onOpenEnvironment(env.id)}
+                    className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all group border ${
+                      activeEnvironmentId === env.id 
+                        ? 'bg-brand-accent/10 border-brand-accent/20' 
+                        : 'hover:bg-white/5 border-transparent'
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                      activeEnvironmentId === env.id ? 'bg-brand-accent text-white' : 'bg-white/5 text-text-dim group-hover:bg-white/10'
+                    }`}>
+                      <Globe className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-text-main truncate group-hover:text-white transition-colors">{env.name}</div>
+                      <div className="text-[10px] text-text-dim truncate opacity-60">
+                        {env.variables.length} Variables
+                      </div>
+                    </div>
+                    <div className="opacity-0 group-hover:opacity-100 transition-all">
+                      <ActionMenu 
+                        onEdit={() => onEdit('environment', env.id, env.name)} 
+                        onDelete={() => onDelete('environment', env.id)} 
+                      />
+                    </div>
+                  </motion.div>
+                ))}
+                {environments.filter(env => env.scope === 'global').length === 0 && (
+                  <div className="p-4 text-center border border-dashed border-white/5 rounded-xl">
+                    <p className="text-[10px] text-text-dim/50 italic">No global environment</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Regular Environments Section */}
+              <div>
+                <div className="px-2 mb-2">
+                  <h3 className="text-[9px] font-black uppercase tracking-widest text-text-dim/40">Environments</h3>
+                </div>
+                {environments.filter(env => !env.scope || env.scope === 'environment').map((env) => (
+                  <motion.div
+                    layout
+                    key={env.id}
+                    onClick={() => onOpenEnvironment(env.id)}
+                    className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all group border ${
+                      activeEnvironmentId === env.id 
+                        ? 'bg-brand-accent/10 border-brand-accent/20' 
+                        : 'hover:bg-white/5 border-transparent'
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                      activeEnvironmentId === env.id ? 'bg-brand-accent text-white' : 'bg-white/5 text-text-dim group-hover:bg-white/10'
+                    }`}>
+                      <Globe className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-text-main truncate group-hover:text-white transition-colors">{env.name}</div>
+                      <div className="text-[10px] text-text-dim truncate opacity-60">
+                        {env.variables.length} Variables
+                      </div>
+                    </div>
+                    <div className="opacity-0 group-hover:opacity-100 transition-all">
+                      <ActionMenu 
+                        onEdit={() => onEdit('environment', env.id, env.name)} 
+                        onDelete={() => onDelete('environment', env.id)} 
+                      />
+                    </div>
+                  </motion.div>
+                ))}
+                {environments.filter(env => !env.scope || env.scope === 'environment').length === 0 && (
+                  <div className="p-4 text-center border border-dashed border-white/5 rounded-xl">
+                    <p className="text-[10px] text-text-dim/50 italic">No environments found</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -267,7 +317,7 @@ export function Sidebar({
                   <div key={srv.id}>
                     {/* ── Server header ── */}
                     <div className={`flex items-center gap-2 px-2 py-2 rounded-xl border transition-all cursor-pointer group
-                      ${activeServerId === srv.id ? 'border-brand-accent/30 bg-brand-accent/5' : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.04]'}`}
+                      ${activeServerId === srv.id ? 'border-brand-accent/20 bg-brand-accent/5' : 'border-white/[0.03] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.06]'}`}
                       onClick={() => toggleServer(srv.id)}>
                       <ChevronRight className={`w-3 h-3 text-text-dim transition-transform shrink-0 ${isServerCollapsed ? '' : 'rotate-90'}`} />
                       <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0
@@ -318,7 +368,7 @@ export function Sidebar({
                               <div key={ws.id}
                                 onClick={() => { if (!isEditing) { setActiveServerId(srv.id); setActiveWorkspaceId(ws.id); } }}
                                 className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all group border
-                                  ${isActive ? 'bg-brand-accent/10 border-brand-accent/20 text-brand-accent' : 'border-transparent hover:bg-white/5 text-text-dim'}`}>
+                                  ${isActive ? 'bg-brand-accent/10 border-brand-accent/20 text-brand-accent' : 'border-white/[0.03] hover:bg-white/5 hover:border-white/[0.06] text-text-dim'}`}>
                                 <LayoutGrid className="w-3 h-3 shrink-0" />
 
                                 {isEditing ? (
@@ -431,6 +481,7 @@ interface CollectionNodeProps {
   onEdit: (type: 'collection' | 'request' | 'environment', id: string, name: string, parentId?: string) => void;
   onDelete: (type: 'collection' | 'request' | 'environment', id: string, parentId?: string) => void;
   onExportCollection: (id: string) => void;
+  onOpenCollectionEnvironment: (collectionId: string) => void;
 }
 
 function CollectionNode({ 
@@ -442,7 +493,8 @@ function CollectionNode({
   onOpenRequest, 
   onEdit, 
   onDelete,
-  onExportCollection
+  onExportCollection,
+  onOpenCollectionEnvironment
 }: CollectionNodeProps) {
   return (
     <div className="space-y-0.5">
@@ -482,6 +534,7 @@ function CollectionNode({
             onEdit={() => onEdit('collection', collection.id, collection.name)} 
             onDelete={() => onDelete('collection', collection.id)} 
             onExport={() => onExportCollection(collection.id)}
+            onEnvironment={level === 0 ? () => onOpenCollectionEnvironment(collection.id) : undefined}
           />
         </div>
       </div>
@@ -502,6 +555,7 @@ function CollectionNode({
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onExportCollection={onExportCollection}
+                onOpenCollectionEnvironment={onOpenCollectionEnvironment}
               />
             ))}
 

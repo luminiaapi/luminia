@@ -9,7 +9,7 @@ export function waitForWails(): Promise<void> {
     const interval = setInterval(() => {
       if ((window as any)?.go?.main?.App) { clearInterval(interval); resolve(); }
     }, 50);
-    setTimeout(() => { clearInterval(interval); resolve(); }, 10000);
+    setTimeout(() => { clearInterval(interval); resolve(); }, 3000);
   });
 }
 

@@ -4,7 +4,7 @@
  */
 
 import { Shield } from 'lucide-react';
-import { RequestTab, Environment } from '../types';
+import { RequestTab, Environment, Collection } from '../types';
 import { VariableInput } from './VariableInput';
 
 interface AuthEditorProps {
@@ -12,9 +12,10 @@ interface AuthEditorProps {
   onUpdate: (auth: RequestTab['auth']) => void;
   environments: Environment[];
   selectedEnvironmentId: string | null;
+  currentCollection?: Collection | null;
 }
 
-export function AuthEditor({ auth, onUpdate, environments, selectedEnvironmentId }: AuthEditorProps) {
+export function AuthEditor({ auth, onUpdate, environments, selectedEnvironmentId, currentCollection }: AuthEditorProps) {
   return (
     <div className="p-8 max-w-2xl">
       <div className="flex gap-4 items-center mb-8">
@@ -59,6 +60,7 @@ export function AuthEditor({ auth, onUpdate, environments, selectedEnvironmentId
               onChange={(val) => onUpdate({ ...auth, bearerToken: val })}
               environments={environments}
               selectedEnvironmentId={selectedEnvironmentId}
+              currentCollection={currentCollection}
             />
           </div>
         )}
@@ -73,6 +75,7 @@ export function AuthEditor({ auth, onUpdate, environments, selectedEnvironmentId
                 onChange={(val) => onUpdate({ ...auth, username: val })}
                 environments={environments}
                 selectedEnvironmentId={selectedEnvironmentId}
+                currentCollection={currentCollection}
               />
             </div>
             <div className="space-y-2">
@@ -83,6 +86,7 @@ export function AuthEditor({ auth, onUpdate, environments, selectedEnvironmentId
                 onChange={(val) => onUpdate({ ...auth, password: val })}
                 environments={environments}
                 selectedEnvironmentId={selectedEnvironmentId}
+                currentCollection={currentCollection}
               />
             </div>
           </div>
@@ -98,6 +102,7 @@ export function AuthEditor({ auth, onUpdate, environments, selectedEnvironmentId
                 onChange={(val) => onUpdate({ ...auth, apiKeyName: val })}
                 environments={environments}
                 selectedEnvironmentId={selectedEnvironmentId}
+                currentCollection={currentCollection}
               />
             </div>
             <div className="space-y-2">
@@ -108,6 +113,7 @@ export function AuthEditor({ auth, onUpdate, environments, selectedEnvironmentId
                 onChange={(val) => onUpdate({ ...auth, apiKeyValue: val })}
                 environments={environments}
                 selectedEnvironmentId={selectedEnvironmentId}
+                currentCollection={currentCollection}
               />
             </div>
           </div>
