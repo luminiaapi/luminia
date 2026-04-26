@@ -1,0 +1,70 @@
+name: ❓ Question
+description: Ask a question about Lumina
+title: "[Question]: "
+labels: ["question"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your question! Please check the [documentation](https://github.com/YOUR_USERNAME/lumina/wiki) and [existing discussions](https://github.com/YOUR_USERNAME/lumina/discussions) first.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: Ask your question here...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Question Category
+      description: What is your question about?
+      options:
+        - Installation & Setup
+        - Usage & Features
+        - Configuration
+        - Authentication
+        - Collections & Environments
+        - Server Integration
+        - Troubleshooting
+        - Best Practices
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Provide any additional context that might help answer your question.
+      placeholder: |
+        - What have you tried?
+        - What documentation have you checked?
+        - Any relevant details about your setup?
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Lumina Version
+      description: What version of Lumina are you using?
+      placeholder: e.g., v1.0.0
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues and discussions for similar questions
+          required: true
+        - label: I have checked the documentation
+          required: false

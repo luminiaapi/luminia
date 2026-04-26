@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Mail, Lock, LogIn, Loader2 } from 'lucide-react';
 import { Checkbox } from './Checkbox';
@@ -11,7 +11,7 @@ import { Checkbox } from './Checkbox';
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLogin: (email: string) => void;
+  onLogin: (email: string, password: string) => Promise<void>;
 }
 
 export function LoginModal({ isOpen, onClose, onLogin }: LoginModalProps) {
@@ -19,20 +19,44 @@ export function LoginModal({ isOpen, onClose, onLogin }: LoginModalProps) {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
     
-    // Simulate API call
-    setTimeout(() => {
-      onLogin(email);
-      setIsLoading(false);
+    try {
+      await onLogin(email, password);
       onClose();
       setEmail('');
       setPassword('');
-    }, 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const handleClose = () => {
+    if (!isLoading) {
+      setEmail('');
+      setPassword('');
+      setError(null);
+      setRememberMe(false);
+      onClose();
+    }
+  };
+
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setEmail('');
+      setPassword('');
+      setError(null);
+      setRememberMe(false);
+    }
+  }, [isOpen]);
 
   return (
     <AnimatePresence>
@@ -42,7 +66,7 @@ export function LoginModal({ isOpen, onClose, onLogin }: LoginModalProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={handleClose}
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
           />
           <motion.div 
@@ -59,14 +83,28 @@ export function LoginModal({ isOpen, onClose, onLogin }: LoginModalProps) {
                 <p className="text-sm text-text-dim">Log in to your Lumina account</p>
               </div>
               <button 
-                onClick={onClose}
-                className="p-2 hover:bg-white/5 rounded-full text-text-dim hover:text-white transition-all"
+                onClick={handleClose}
+                disabled={isLoading}
+                className="p-2 hover:bg-white/5 rounded-full text-text-dim hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-xl"
+                >
+                  <Lock className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-red-500">Login Failed</p>
+                    <p className="text-xs text-red-400 mt-1">{error}</p>
+                  </div>
+                </motion.div>
+              )}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-text-dim ml-1">Email Address</label>
                 <div className="relative group">
@@ -78,7 +116,8 @@ export function LoginModal({ isOpen, onClose, onLogin }: LoginModalProps) {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-bg-deep border border-white/5 focus:border-brand-accent/50 rounded-2xl py-3.5 pl-11 pr-4 text-sm outline-none transition-all placeholder:text-text-dim/20"
+                    disabled={isLoading}
+                    className="w-full bg-bg-deep border border-white/5 focus:border-brand-accent/50 rounded-2xl py-3.5 pl-11 pr-4 text-sm outline-none transition-all placeholder:text-text-dim/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder="name@company.com"
                   />
                 </div>
@@ -95,7 +134,8 @@ export function LoginModal({ isOpen, onClose, onLogin }: LoginModalProps) {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-bg-deep border border-white/5 focus:border-brand-accent/50 rounded-2xl py-3.5 pl-11 pr-4 text-sm outline-none transition-all placeholder:text-text-dim/20"
+                    disabled={isLoading}
+                    className="w-full bg-bg-deep border border-white/5 focus:border-brand-accent/50 rounded-2xl py-3.5 pl-11 pr-4 text-sm outline-none transition-all placeholder:text-text-dim/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder="••••••••"
                   />
                 </div>

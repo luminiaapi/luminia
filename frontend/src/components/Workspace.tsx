@@ -30,6 +30,7 @@ interface WorkspaceProps {
   environments: Environment[];
   selectedEnvironmentId: string | null;
   collections: Collection[];
+  activeServer?: { id: string; name: string; url: string | null; isConnected: boolean; status?: string };
   onSetActiveTab: (id: string) => void;
   onCloseTab: (e: any, id: string) => void;
   onNewTab: () => void;
@@ -48,6 +49,7 @@ interface WorkspaceProps {
 export function Workspace({
   tabs,
   activeTabId,
+  activeServer,
   activeWorkTab,
   environments,
   selectedEnvironmentId,
@@ -678,10 +680,17 @@ export function Workspace({
 
       <footer className="h-8 border-t border-white/5 bg-bg-deep flex items-center px-4 justify-between text-[11px] font-mono opacity-40 z-30 shrink-0">
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5 text-emerald-400">
-            <Shield className="w-3 h-3" />
-            Connected to Lumina Cloud
-          </span>
+          {activeServer?.isConnected && activeServer.name !== 'Local' ? (
+            <span className="flex items-center gap-1.5 text-emerald-400">
+              <Shield className="w-3 h-3" />
+              Connected to {activeServer.name}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-emerald-400">
+              <Shield className="w-3 h-3" />
+              Connected to Lumina Cloud
+            </span>
+          )}
           <span className="flex items-center gap-1.5">
             <Terminal className="w-3 h-3" />
             Engine v1.42.0

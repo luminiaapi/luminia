@@ -7,5 +7,12 @@
   "frontend:dev:serverUrl": "http://localhost:3000",
   "author": {
     "name": "Lumina"
+  },
+  "info": {
+    "companyName": "Lumina",
+    "productName": "Lumina",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright © 2024 Lumina",
+    "comments": "Modern API Client"
   }
 }
