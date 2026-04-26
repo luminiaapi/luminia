@@ -432,68 +432,61 @@ jobs:
         run: |
           $VERSION = "${{ steps.version.outputs.clean_version }}"
           $RELEASE_NAME = "${{ steps.version.outputs.release_name }}"
-          
+
           # Normalize version to #.#.#.# format required by WiX
-          # Strip any non-numeric prefix (e.g. dev-abc1234 -> 0.0.0.0)
           if ($VERSION -match '^\d') {
-            # Parse semver parts, pad to 4 parts
-            $parts = $VERSION -replace '[^0-9.]','' -split '\.' 
+            $parts = ($VERSION -replace '[^0-9.]','') -split '\.'
             while ($parts.Count -lt 4) { $parts += '0' }
-            $MSI_VERSION = ($parts[0..3] -join '.')
+            $MSI_VERSION = $parts[0..3] -join '.'
           } else {
             $MSI_VERSION = "0.0.0.0"
           }
-          
+
           Write-Host "MSI Version: $MSI_VERSION" -ForegroundColor Cyan
-          
+
           # Install WiX Toolset
           Write-Host "Installing WiX Toolset..." -ForegroundColor Cyan
           dotnet tool install --global wix --version 5.0.2
-          
-          # Create WiX source file (WiX v5 syntax)
-          $wxsContent = @"
-<?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="Lumina" Version="$MSI_VERSION" Manufacturer="Lumina" UpgradeCode="12345678-1234-1234-1234-123456789012">
-    <MajorUpgrade DowngradeErrorMessage="A newer version of Lumina is already installed." />
-    <MediaTemplate EmbedCab="yes" />
 
-    <Feature Id="ProductFeature" Title="Lumina" Level="1">
-      <ComponentGroupRef Id="ProductComponents" />
-    </Feature>
-  </Package>
+          # Write WiX source file line by line to avoid YAML heredoc issues
+          $lines = @(
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">',
+            "  <Package Name=""Lumina"" Version=""$MSI_VERSION"" Manufacturer=""Lumina"" UpgradeCode=""12345678-1234-1234-1234-123456789012"">",
+            '    <MajorUpgrade DowngradeErrorMessage="A newer version of Lumina is already installed." />',
+            '    <MediaTemplate EmbedCab="yes" />',
+            '    <Feature Id="ProductFeature" Title="Lumina" Level="1">',
+            '      <ComponentGroupRef Id="ProductComponents" />',
+            '    </Feature>',
+            '  </Package>',
+            '  <Fragment>',
+            '    <StandardDirectory Id="ProgramFiles64Folder">',
+            '      <Directory Id="INSTALLFOLDER" Name="Lumina" />',
+            '    </StandardDirectory>',
+            '    <StandardDirectory Id="ProgramMenuFolder">',
+            '      <Directory Id="ApplicationProgramsFolder" Name="Lumina" />',
+            '    </StandardDirectory>',
+            '  </Fragment>',
+            '  <Fragment>',
+            '    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">',
+            '      <Component Id="LuminaExe" Guid="*">',
+            '        <File Id="LuminaExeFile" Source="build\bin\lumina.exe" KeyPath="yes">',
+            '          <Shortcut Id="ApplicationStartMenuShortcut" Directory="ApplicationProgramsFolder" Name="Lumina" WorkingDirectory="INSTALLFOLDER" Icon="LuminaIcon.exe" IconIndex="0" Advertise="yes" />',
+            '        </File>',
+            '      </Component>',
+            '    </ComponentGroup>',
+            '  </Fragment>',
+            '  <Fragment>',
+            '    <Icon Id="LuminaIcon.exe" SourceFile="build\windows\icon.ico" />',
+            '  </Fragment>',
+            '</Wix>'
+          )
+          $lines | Set-Content -Path "lumina.wxs" -Encoding UTF8
 
-  <Fragment>
-    <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="Lumina" />
-    </StandardDirectory>
-    <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="ApplicationProgramsFolder" Name="Lumina" />
-    </StandardDirectory>
-  </Fragment>
-
-  <Fragment>
-    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      <Component Id="LuminaExe" Guid="*">
-        <File Id="LuminaExeFile" Source="build\bin\lumina.exe" KeyPath="yes">
-          <Shortcut Id="ApplicationStartMenuShortcut" Directory="ApplicationProgramsFolder" Name="Lumina" WorkingDirectory="INSTALLFOLDER" Icon="LuminaIcon.exe" IconIndex="0" Advertise="yes" />
-        </File>
-      </Component>
-    </ComponentGroup>
-  </Fragment>
-
-  <Fragment>
-    <Icon Id="LuminaIcon.exe" SourceFile="build\windows\icon.ico" />
-  </Fragment>
-</Wix>
-"@
-          
-          $wxsContent | Out-File -FilePath "lumina.wxs" -Encoding UTF8
-          
           # Build MSI
           Write-Host "Building MSI installer..." -ForegroundColor Cyan
           wix build lumina.wxs -out "${RELEASE_NAME}.msi"
-          
+
           if (Test-Path "${RELEASE_NAME}.msi") {
             Write-Host "✓ MSI installer created: ${RELEASE_NAME}.msi" -ForegroundColor Green
           } else {
