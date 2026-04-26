@@ -40,6 +40,7 @@ import {
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const [isLoading, setIsLoading] = useState(true);
   const [activeWorkTab, setActiveWorkTab] = useState<
     'params' | 'auth' | 'headers' | 'body' | 'scripts' | 'settings' | 'code'
   >('params');
@@ -68,6 +69,7 @@ export default function App() {
     activeServerId, activeWorkspaceId,
     activeWorkspaceMode, setActiveWorkspaceMode,
     addServer, loginToWorkspace, logoutFromWorkspace,
+    servers,
   } = useWorkspaceStore();
 
   const {
@@ -94,13 +96,23 @@ export default function App() {
     useEnvironmentStore.getState().setWorkspaceId(wsId);
     if (!isWailsAvailable()) return;
 
-    try {
-      const cols = await loadCollections(wsId);
-      useCollectionStore.getState().setCollections(Array.isArray(cols) && cols.length > 0 ? cols : []);
-    } catch (e) { console.error('loadCollections', e); }
+    // Load data in parallel for faster startup
+    const [colsResult, envsResult] = await Promise.allSettled([
+      loadCollections(wsId),
+      loadEnvironments(wsId),
+    ]);
 
-    try {
-      const envs = await loadEnvironments(wsId);
+    // Handle collections
+    if (colsResult.status === 'fulfilled') {
+      const cols = colsResult.value;
+      useCollectionStore.getState().setCollections(Array.isArray(cols) && cols.length > 0 ? cols : []);
+    } else {
+      console.error('loadCollections', colsResult.reason);
+    }
+
+    // Handle environments
+    if (envsResult.status === 'fulfilled') {
+      const envs = envsResult.value;
       if (Array.isArray(envs) && envs.length > 0) {
         useEnvironmentStore.getState().setEnvironments(envs);
         useEnvironmentStore.getState().setActiveEnvironmentId(envs[0].id);
@@ -108,30 +120,54 @@ export default function App() {
         useEnvironmentStore.getState().setEnvironments([]);
         useEnvironmentStore.getState().setActiveEnvironmentId(null);
       }
-    } catch (e) { console.error('loadEnvironments', e); }
+    } else {
+      console.error('loadEnvironments', envsResult.reason);
+    }
   }, []);
 
   // ── Startup ──────────────────────────────────────────────────────────────────
   useEffect(() => {
+    const startTime = performance.now();
+    
     waitForWails().then(async () => {
-      if (!isWailsAvailable()) return;
-
-      const wsState = await loadWorkspaceStateFromDb();
-      if (wsState) useWorkspaceStore.getState().loadFromDb(wsState);
-
-      await loadWorkspaceData(useWorkspaceStore.getState().activeWorkspaceId);
+      if (!isWailsAvailable()) {
+        setIsLoading(false);
+        return;
+      }
 
       try {
-        const hist = await loadHistory(100);
-        if (Array.isArray(hist)) useHistoryStore.getState().setHistory(hist);
-      } catch (e) { console.error('loadHistory', e); }
+        // Load workspace state first
+        const wsState = await loadWorkspaceStateFromDb();
+        if (wsState) useWorkspaceStore.getState().loadFromDb(wsState);
 
-      try {
-        const email = await getKV('login_email');
-        if (email) useUIStore.getState().handleLogin(email);
-      } catch { /* not logged in */ }
+        const activeWsId = useWorkspaceStore.getState().activeWorkspaceId;
+
+        // Load all data in parallel for faster startup
+        const [workspaceResult, histResult, emailResult] = await Promise.allSettled([
+          loadWorkspaceData(activeWsId),
+          loadHistory(100),
+          getKV('login_email'),
+        ]);
+
+        // Handle history
+        if (histResult.status === 'fulfilled' && Array.isArray(histResult.value)) {
+          useHistoryStore.getState().setHistory(histResult.value);
+        }
+
+        // Handle login state
+        if (emailResult.status === 'fulfilled' && emailResult.value) {
+          useUIStore.getState().handleLogin(emailResult.value);
+        }
+
+        const loadTime = performance.now() - startTime;
+        console.log(`App initialized in ${loadTime.toFixed(0)}ms`);
+      } catch (e) {
+        console.error('Startup error:', e);
+      } finally {
+        setIsLoading(false);
+      }
     });
-  }, []);
+  }, [loadWorkspaceData]);
 
   // ── Reload on workspace switch ───────────────────────────────────────────────
   const prevWorkspaceId = useRef(activeWorkspaceId);
@@ -361,17 +397,35 @@ export default function App() {
   }, [activeTab, updateActiveTab]);
 
   // ── Auth ─────────────────────────────────────────────────────────────────────
-  const handleAppLogin = useCallback((email: string) => {
+  const handleAppLogin = useCallback(async (email: string, password: string) => {
+    if (activeServerId !== 'local') {
+      await loginToWorkspace(activeServerId, email, password);
+    }
+    // Update UI state to show logged in
     onLogin(email);
     setKV('login_email', email).catch(console.error);
-    if (activeServerId !== 'local') loginToWorkspace(activeServerId, email);
   }, [onLogin, activeServerId, loginToWorkspace]);
 
-  const handleAppLogout = useCallback(() => {
+  const handleAppLogout = useCallback(async () => {
+    if (activeServerId !== 'local') {
+      await logoutFromWorkspace(activeServerId);
+    }
+    // Update UI state to show logged out
     onLogout();
     deleteKV('login_email').catch(console.error);
-    if (activeServerId !== 'local') logoutFromWorkspace(activeServerId);
   }, [onLogout, activeServerId, logoutFromWorkspace]);
+
+  // Update login state when active server changes
+  useEffect(() => {
+    const activeServer = servers.find(s => s.id === activeServerId);
+    if (activeServer?.user?.email) {
+      // Server is authenticated, update UI to show logged in
+      onLogin(activeServer.user.email);
+    } else {
+      // Server is not authenticated, update UI to show logged out
+      onLogout();
+    }
+  }, [activeServerId, servers, onLogin, onLogout]);
 
   // ── Environment editor helpers ───────────────────────────────────────────────
   const activeEnv = environments.find(e => e.id === activeEnvironmentId);
@@ -450,6 +504,24 @@ export default function App() {
   ].filter(Boolean).join(' ');
 
   // ── Render ───────────────────────────────────────────────────────────────────
+  const activeServer = servers.find(s => s.id === activeServerId);
+
+  // Show loading indicator during initialization
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-bg-deep">
+        <div className="text-center">
+          <motion.div
+            className="w-16 h-16 border-4 border-brand-accent border-t-transparent rounded-full mx-auto mb-4"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          />
+          <p className="text-text-dim text-sm">Loading Lumina...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex h-screen bg-bg-deep text-text-main overflow-hidden ${cursorClass}`} id="lumina-app">
 
@@ -480,14 +552,22 @@ export default function App() {
           </div>
 
           <div className="mt-auto flex flex-col gap-6">
-            {modals.login.email ? (
+            {activeServer?.user ? (
               <div className="flex flex-col gap-6 items-center">
                 <button onClick={handleAppLogout} className="p-3 text-danger hover:bg-danger/10 rounded-xl transition-all" title="Logout">
                   <LogOut className="w-5 h-5" />
                 </button>
-                <div className="w-8 h-8 rounded-full bg-brand-accent flex items-center justify-center text-[10px] font-bold shadow-[0_4px_10px_rgba(139,92,246,0.3)] border border-white/20">
-                  {modals.login.email.substring(0, 2).toUpperCase()}
-                </div>
+                {activeServer.user.photo_url ? (
+                  <img 
+                    src={activeServer.user.photo_url} 
+                    alt={activeServer.user.display_name}
+                    className="w-8 h-8 rounded-full shadow-[0_4px_10px_rgba(139,92,246,0.3)] border border-white/20 object-cover"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-brand-accent flex items-center justify-center text-[10px] font-bold shadow-[0_4px_10px_rgba(139,92,246,0.3)] border border-white/20" title={activeServer.user.display_name}>
+                    {activeServer.user.display_name.substring(0, 2).toUpperCase()}
+                  </div>
+                )}
               </div>
             ) : (
               <NavItem label="Login" icon={<User className="w-5 h-5" />} active={false}
@@ -551,6 +631,7 @@ export default function App() {
           tabs={tabs} activeTabId={activeTabId} activeWorkTab={activeWorkTab}
           environments={environments} selectedEnvironmentId={activeEnvironmentId}
           collections={collections}
+          activeServer={activeServer}
           onSetActiveTab={(id) => { setActiveWorkspaceMode('request'); setActiveTabId(id); }}
           onCloseTab={(_, id) => closeTab(id)}
           onNewTab={addNewTab}

@@ -122,5 +122,14 @@ export interface Server {
   isConnected: boolean;
   status?: 'disconnected' | 'connecting' | 'connected' | 'authenticated';
   userEmail?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  tokenExpiresAt?: number;
+  user?: {
+    id: string;
+    display_name: string;
+    email: string;
+    photo_url?: string;
+  };
   workspaces: Workspace[];
 }

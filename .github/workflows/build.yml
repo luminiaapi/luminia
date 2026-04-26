@@ -103,20 +103,54 @@ jobs:
           cd ${{ env.FRONTEND_PATH }}
           pnpm install --no-frozen-lockfile
 
-      - name: Build application
-        run: wails build -platform linux/amd64
+      - name: Verify icon files
+        run: |
+          echo "Checking icon files..."
+          if [ -f "build/appicon.png" ]; then
+            echo "✓ Icon file exists: build/appicon.png"
+            ls -lh build/appicon.png
+          else
+            echo "✗ Missing: build/appicon.png"
+            exit 1
+          fi
+
+      - name: Build application with custom icons
+        run: |
+          echo "Building Lumina with custom icons..."
+          wails build -platform linux/amd64
+          if [ $? -ne 0 ]; then
+            echo "Build failed!"
+            exit 1
+          fi
+          echo "Build completed successfully!"
 
       - name: Prepare artifacts
         run: |
+          echo "Preparing artifacts..."
           ls -lahR build/bin/
           mkdir -p dist
           cp build/bin/lumina dist/Lumina_linux_x64
+          
+          # Show file sizes
+          echo ""
+          echo "Build artifacts:"
+          ls -lh dist/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: lumina-linux
           path: dist/*
+
+      - name: Build summary
+        run: |
+          echo "## ✅ Linux Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** Linux x64" >> $GITHUB_STEP_SUMMARY
+          echo "**Icon:** Custom Lumina icon included" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          ls -lh dist/ | tail -n +2 | awk '{printf "- **%s**: %s\n", $9, $5}' >> $GITHUB_STEP_SUMMARY
 
   build-windows:
     runs-on: windows-latest
@@ -173,18 +207,55 @@ jobs:
           cd ${{ env.FRONTEND_PATH }}
           pnpm install --no-frozen-lockfile
 
-      - name: Build application with NSIS installer
+      - name: Verify icon files
         shell: pwsh
-        run: wails build -platform windows/amd64 -nsis
+        run: |
+          Write-Host "Checking icon files..." -ForegroundColor Cyan
+          if (Test-Path "build/windows/icon.ico") {
+            Write-Host "✓ Icon file exists: build/windows/icon.ico" -ForegroundColor Green
+            $iconSize = (Get-Item "build/windows/icon.ico").Length
+            Write-Host "  Size: $([math]::Round($iconSize/1KB, 2)) KB" -ForegroundColor White
+          } else {
+            Write-Host "✗ Missing: build/windows/icon.ico" -ForegroundColor Red
+            exit 1
+          }
+          if (Test-Path "build/appicon.png") {
+            Write-Host "✓ Icon file exists: build/appicon.png" -ForegroundColor Green
+            $appIconSize = (Get-Item "build/appicon.png").Length
+            Write-Host "  Size: $([math]::Round($appIconSize/1KB, 2)) KB" -ForegroundColor White
+          } else {
+            Write-Host "✗ Missing: build/appicon.png" -ForegroundColor Red
+            exit 1
+          }
+
+      - name: Build application with custom icons
+        shell: pwsh
+        run: |
+          Write-Host "Building Lumina with custom icons..." -ForegroundColor Cyan
+          wails build -platform windows/amd64 -nsis
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Build failed!" -ForegroundColor Red
+            exit 1
+          }
+          Write-Host "Build completed successfully!" -ForegroundColor Green
 
       - name: Prepare artifacts
         shell: pwsh
         run: |
+          Write-Host "Preparing artifacts..." -ForegroundColor Cyan
           Get-ChildItem -Recurse build\bin\
           mkdir dist
           Copy-Item build\bin\lumina.exe dist\Lumina_win_x64.exe
           if (Test-Path build\bin\lumina-amd64-installer.exe) {
             Copy-Item build\bin\lumina-amd64-installer.exe dist\Lumina_win_x64_installer.exe
+            Write-Host "✓ Installer created" -ForegroundColor Green
+          }
+          
+          # Show file sizes
+          Write-Host "`nBuild artifacts:" -ForegroundColor Cyan
+          Get-ChildItem dist\ | ForEach-Object {
+            $size = [math]::Round($_.Length/1MB, 2)
+            Write-Host "  $($_.Name): $size MB" -ForegroundColor White
           }
 
       - name: Upload artifacts
@@ -192,3 +263,18 @@ jobs:
         with:
           name: lumina-windows
           path: dist/*
+
+      - name: Build summary
+        shell: pwsh
+        run: |
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## ✅ Windows Build Complete"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "**Platform:** Windows x64"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "**Icon:** Custom Lumina icon (icon.ico)"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "**Installer:** NSIS installer included"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### Artifacts"
+          Get-ChildItem dist\ | ForEach-Object {
+            $size = [math]::Round($_.Length/1MB, 2)
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **$($_.Name)**: $size MB"
+          }

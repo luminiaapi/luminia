@@ -59,7 +59,7 @@ interface WorkspaceState {
 
   // Server actions
   setActiveServerId: (id: string) => void;
-  addServer: (name: string, url: string) => void;
+  addServer: (name: string, url: string) => Promise<void>;
   removeServer: (id: string) => void;
   connectServer: (id: string) => void;
 
@@ -70,8 +70,10 @@ interface WorkspaceState {
   removeWorkspace: (serverId: string, workspaceId: string) => void;
   renameWorkspace: (serverId: string, workspaceId: string, name: string) => void;
 
-  loginToWorkspace: (serverId: string, email: string) => void;
-  logoutFromWorkspace: (serverId: string) => void;
+  loginToWorkspace: (serverId: string, email: string, password: string) => Promise<void>;
+  logoutFromWorkspace: (serverId: string) => Promise<void>;
+  refreshToken: (serverId: string) => Promise<void>;
+  getUserInfo: (serverId: string) => Promise<void>;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
@@ -85,6 +87,23 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       servers: state.servers,
       activeServerId: state.activeServerId,
       activeWorkspaceId: state.activeWorkspaceId,
+    });
+
+    // Set up token refresh for authenticated servers
+    state.servers.forEach(server => {
+      if (server.accessToken && server.refreshToken && server.tokenExpiresAt) {
+        const timeUntilExpiry = server.tokenExpiresAt - Date.now();
+        const refreshTime = Math.max(0, timeUntilExpiry - 60000); // Refresh 1 minute before expiry
+        
+        if (refreshTime > 0) {
+          setTimeout(() => {
+            get().refreshToken(server.id).catch(console.error);
+          }, refreshTime);
+        } else {
+          // Token already expired, refresh immediately
+          get().refreshToken(server.id).catch(console.error);
+        }
+      }
     });
   },
 
@@ -107,19 +126,78 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     saveToDb({ servers: get().servers, ...next });
   },
 
-  addServer: (name, url) => {
+  addServer: async (name, url) => {
     const serverId = generateId();
     const wsId = generateId();
+    
+    // Create server with connecting status
     const newServer: Server = {
-      id: serverId, name, url,
-      isConnected: false, status: 'disconnected',
+      id: serverId, 
+      name, 
+      url,
+      isConnected: false, 
+      status: 'connecting',
       workspaces: [{ id: wsId, name: 'Default Workspace', serverId }],
     };
+    
     set(state => {
       const servers = [...state.servers, newServer];
-      saveToDb({ servers, activeServerId: state.activeServerId, activeWorkspaceId: state.activeWorkspaceId });
       return { servers };
     });
+
+    try {
+      // Step 1: Check health endpoint
+      const healthUrl = url.endsWith('/') ? `${url}health` : `${url}/health`;
+      const healthResponse = await fetch(healthUrl, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!healthResponse.ok) {
+        throw new Error('Server health check failed');
+      }
+
+      const healthData = await healthResponse.json();
+      if (healthData.status !== 'OK') {
+        throw new Error('Server is not healthy');
+      }
+
+      // Step 2: Get server info
+      const infoUrl = url.endsWith('/') ? `${url}api/v1/server-info` : `${url}/api/v1/server-info`;
+      const infoResponse = await fetch(infoUrl, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!infoResponse.ok) {
+        throw new Error('Failed to get server info');
+      }
+
+      const infoData = await infoResponse.json();
+      if (!infoData.initialized) {
+        throw new Error('Server is not initialized');
+      }
+
+      // Step 3: Update server with success status and server name
+      set(state => {
+        const servers = state.servers.map(s => 
+          s.id === serverId 
+            ? { ...s, name: infoData.server_name, status: 'connected' as const, isConnected: true }
+            : s
+        );
+        saveToDb({ servers, activeServerId: state.activeServerId, activeWorkspaceId: state.activeWorkspaceId });
+        return { servers };
+      });
+
+    } catch (error) {
+      // Remove server on failure
+      set(state => {
+        const servers = state.servers.filter(s => s.id !== serverId);
+        saveToDb({ servers, activeServerId: state.activeServerId, activeWorkspaceId: state.activeWorkspaceId });
+        return { servers };
+      });
+      throw error;
+    }
   },
 
   removeServer: (id) => {
@@ -191,11 +269,195 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     });
   },
 
-  loginToWorkspace: (serverId, email) => {
-    set(state => ({ servers: state.servers.map(s => s.id === serverId ? { ...s, status: 'authenticated', userEmail: email } : s) }));
+  loginToWorkspace: async (serverId, email, password) => {
+    const server = get().servers.find(s => s.id === serverId);
+    if (!server || !server.url) {
+      throw new Error('Server not found or invalid');
+    }
+
+    try {
+      const loginUrl = server.url.endsWith('/') ? `${server.url}api/v1/auth/login` : `${server.url}/api/v1/auth/login`;
+      const response = await fetch(loginUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Login failed' }));
+        throw new Error(error.message || 'Login failed');
+      }
+
+      const data = await response.json();
+      
+      // Calculate token expiration time
+      const expiresAt = Date.now() + (data.expires_in * 1000);
+
+      // Update server with authentication data
+      set(state => {
+        const servers = state.servers.map(s =>
+          s.id === serverId
+            ? {
+                ...s,
+                status: 'authenticated' as const,
+                userEmail: data.user.email,
+                accessToken: data.access_token,
+                refreshToken: data.refresh_token,
+                tokenExpiresAt: expiresAt,
+                user: {
+                  id: data.user.id,
+                  display_name: data.user.display_name,
+                  email: data.user.email,
+                  photo_url: data.user.photo_url,
+                },
+              }
+            : s
+        );
+        saveToDb({ servers, activeServerId: state.activeServerId, activeWorkspaceId: state.activeWorkspaceId });
+        return { servers };
+      });
+
+      // Set up token refresh timer
+      const refreshTime = (data.expires_in - 60) * 1000; // Refresh 1 minute before expiry
+      setTimeout(() => {
+        get().refreshToken(serverId).catch(console.error);
+      }, refreshTime);
+
+    } catch (error) {
+      throw error;
+    }
   },
 
-  logoutFromWorkspace: (serverId) => {
-    set(state => ({ servers: state.servers.map(s => s.id === serverId ? { ...s, status: 'connected', userEmail: undefined } : s) }));
+  logoutFromWorkspace: async (serverId) => {
+    const server = get().servers.find(s => s.id === serverId);
+    if (!server || !server.url || !server.accessToken) {
+      return;
+    }
+
+    try {
+      const logoutUrl = server.url.endsWith('/') ? `${server.url}api/v1/auth/logout` : `${server.url}/api/v1/auth/logout`;
+      await fetch(logoutUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${server.accessToken}`,
+        },
+      });
+    } catch (error) {
+      console.error('Logout request failed:', error);
+    } finally {
+      // Clear authentication data regardless of API response
+      set(state => {
+        const servers = state.servers.map(s =>
+          s.id === serverId
+            ? {
+                ...s,
+                status: 'connected' as const,
+                userEmail: undefined,
+                accessToken: undefined,
+                refreshToken: undefined,
+                tokenExpiresAt: undefined,
+                user: undefined,
+              }
+            : s
+        );
+        saveToDb({ servers, activeServerId: state.activeServerId, activeWorkspaceId: state.activeWorkspaceId });
+        return { servers };
+      });
+    }
+  },
+
+  refreshToken: async (serverId) => {
+    const server = get().servers.find(s => s.id === serverId);
+    if (!server || !server.url || !server.refreshToken) {
+      return;
+    }
+
+    try {
+      const refreshUrl = server.url.endsWith('/') ? `${server.url}api/v1/auth/refresh` : `${server.url}/api/v1/auth/refresh`;
+      const response = await fetch(refreshUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: server.refreshToken }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Token refresh failed');
+      }
+
+      const data = await response.json();
+      const expiresAt = Date.now() + (data.expires_in * 1000);
+
+      set(state => {
+        const servers = state.servers.map(s =>
+          s.id === serverId
+            ? {
+                ...s,
+                accessToken: data.access_token,
+                refreshToken: data.refresh_token,
+                tokenExpiresAt: expiresAt,
+              }
+            : s
+        );
+        saveToDb({ servers, activeServerId: state.activeServerId, activeWorkspaceId: state.activeWorkspaceId });
+        return { servers };
+      });
+
+      // Set up next refresh
+      const refreshTime = (data.expires_in - 60) * 1000;
+      setTimeout(() => {
+        get().refreshToken(serverId).catch(console.error);
+      }, refreshTime);
+
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      // On refresh failure, logout the user
+      await get().logoutFromWorkspace(serverId);
+    }
+  },
+
+  getUserInfo: async (serverId) => {
+    const server = get().servers.find(s => s.id === serverId);
+    if (!server || !server.url || !server.accessToken) {
+      return;
+    }
+
+    try {
+      const meUrl = server.url.endsWith('/') ? `${server.url}api/v1/auth/me` : `${server.url}/api/v1/auth/me`;
+      const response = await fetch(meUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${server.accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get user info');
+      }
+
+      const data = await response.json();
+
+      set(state => {
+        const servers = state.servers.map(s =>
+          s.id === serverId
+            ? {
+                ...s,
+                user: {
+                  id: data.id,
+                  display_name: data.display_name,
+                  email: data.email,
+                  photo_url: data.photo_url,
+                },
+              }
+            : s
+        );
+        saveToDb({ servers, activeServerId: state.activeServerId, activeWorkspaceId: state.activeWorkspaceId });
+        return { servers };
+      });
+
+    } catch (error) {
+      console.error('Failed to get user info:', error);
+    }
   },
 }));
